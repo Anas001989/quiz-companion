@@ -1,0 +1,89 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Teacher {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  quizzes   Quiz[]
+  createdAt DateTime @default(now())
+}
+
+model Student {
+  id        String   @id @default(cuid())
+  fullName  String
+  nickName  String?
+  attempts  Attempt[]
+  createdAt DateTime @default(now())
+}
+
+model Quiz {
+  id        String     @id @default(cuid())
+  title     String
+  teacher   Teacher    @relation(fields: [teacherId], references: [id])
+  teacherId String
+  questions Question[]
+  attempts  Attempt[]
+  createdAt DateTime   @default(now())
+}
+
+model Question {
+  id         String    @id @default(cuid())
+  text       String
+  type       QuestionType
+  quiz       Quiz      @relation(fields: [quizId], references: [id])
+  quizId     String
+  options    Option[]
+  answers    Answer[]  // 🔥 added opposite relation
+}
+
+model Option {
+  id         String    @id @default(cuid())
+  text       String
+  isCorrect  Boolean   @default(false)
+  question   Question  @relation(fields: [questionId], references: [id])
+  questionId String
+  answers    Answer[]  // 🔥 added opposite relation
+}
+
+model Attempt {
+  id        String      @id @default(cuid())
+  student   Student     @relation(fields: [studentId], references: [id])
+  studentId String
+  quiz      Quiz        @relation(fields: [quizId], references: [id])
+  quizId    String
+  answers   Answer[]
+  score     Int
+  createdAt DateTime    @default(now())
+}
+
+model Answer {
+  id         String    @id @default(cuid())
+  attempt    Attempt   @relation(fields: [attemptId], references: [id])
+  attemptId  String
+  question   Question  @relation(fields: [questionId], references: [id])
+  questionId String
+  option     Option?   @relation(fields: [optionId], references: [id])
+  optionId   String?
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  MIXED
+}
