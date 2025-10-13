@@ -1,64 +1,109 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Box,
+  Button,
+  Container,
+  Heading,
+  Input,
+  VStack,
+} from "@chakra-ui/react";
+import {
+  FormControl,
+  FormLabel,
+} from "@chakra-ui/form-control";
+import { useToast } from "@chakra-ui/toast";
 
 export default function HomePage() {
-  const router = useRouter()
-  const [fullName, setFullName] = useState('')
-  const [nickname, setNickname] = useState('')
+  const router = useRouter();
+  const toast = useToast();
+  const [fullName, setFullName] = useState("");
+  const [nickname, setNickname] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (!fullName.trim()) {
-      alert('Please enter your full name to start the quiz.')
-      return
+      toast({
+        title: "Full name required.",
+        description: "Please enter your full name to start the quiz.",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
     }
 
-    // For now, we’ll use a placeholder quizId until dynamic quizzes are added.
-    const quizId = 'demo-quiz'
-    const params = new URLSearchParams({ fullName, nickname })
-    router.push(`/quiz/${quizId}?${params.toString()}`)
-  }
+    const quizId = "demo-quiz";
+    const params = new URLSearchParams({ fullName, nickname });
+    router.push(`/quiz/${quizId}/select-character/?${params.toString()}`);
+  };
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-white">
-      <h1 className="text-4xl font-bold mb-6 text-gray-800">Welcome to Quiz Companion 🧠</h1>
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white shadow-lg rounded-2xl p-8 w-96 space-y-4 border border-gray-100"
+    <Box
+      minH="100vh"
+      bgGradient="linear(to-b, blue.50, white)"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+    >
+      <Container
+        maxW="md"
+        bg="white"
+        boxShadow="xl"
+        rounded="2xl"
+        p={8}
+        border="1px"
+        borderColor="gray.100"
       >
-        <div>
-          <label className="block text-gray-700 mb-2 font-semibold">Full Name</label>
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            placeholder="Enter your full name"
-            required
-          />
-        </div>
+        <VStack gap={6}>
+          <Heading
+            as="h1"
+            size="lg"
+            textAlign="center"
+            color="blue.700"
+            className="font-bold"
+          >
+            Welcome to Quiz Companion 🧠
+          </Heading>
 
-        <div>
-          <label className="block text-gray-700 mb-2 font-semibold">Nickname (optional)</label>
-          <input
-            type="text"
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            placeholder="Enter a nickname"
-          />
-        </div>
+          <form onSubmit={handleSubmit} className="w-full">
+            <VStack gap={4}>
+              <FormControl isRequired>
+                <FormLabel>Full Name</FormLabel>
+                <Input
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Enter your full name"
+                  _focus={{ borderColor: "blue.400" }}
+                />
+              </FormControl>
 
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
-        >
-          Start Quiz
-        </button>
-      </form>
-    </div>
-  )
+              <FormControl>
+                <FormLabel>Nickname (optional)</FormLabel>
+                <Input
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  placeholder="Enter a nickname"
+                  _focus={{ borderColor: "blue.400" }}
+                />
+              </FormControl>
+
+              <Button
+                type="submit"
+                colorScheme="blue"
+                width="full"
+                size="lg"
+                className="font-semibold"
+              >
+                Start Quiz
+              </Button>
+            </VStack>
+          </form>
+        </VStack>
+      </Container>
+    </Box>
+  );
 }

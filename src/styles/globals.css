@@ -1,0 +1,45 @@
+
+/* Fix visibility and sizing for both radio & checkbox controls */
+.chakra-radio__control,
+.chakra-checkbox__control {
+  width: 1rem !important;
+  height: 1rem !important;
+  min-width: 1rem !important;
+  min-height: 1rem !important;
+  position: relative !important;
+  top: 0 !important;
+  left: 0 !important;
+  transform: none !important;
+
+  border: 1px solid #999 !important;
+  /*margin-right: 0.4rem !important;*/
+  background: white !important;
+}
+
+/* Ensure proper label alignment and spacing */
+.chakra-radio,
+.chakra-checkbox {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.6rem !important; /* equal spacing between control and label */
+  line-height: 1.4; /* keeps labels vertically aligned */
+  margin-bottom: 0.4rem; /* consistent vertical spacing between options */
+}
+
+/* Optional: focus ring visibility */
+.chakra-radio__control:focus,
+.chakra-checkbox__control:focus {
+  outline: none;
+ /* box-shadow: 0 0 0 3px rgba(5, 69, 30, 0.25);*/
+  border-radius: 9999px;
+}
+
+.chakra-radio__control {
+    border-radius: 50% !important;
+  }
+
+  /* --- Highlight checked state --- */
+  .chakra-radio__control[data-checked] {
+    border-color: #3182ce !important;
+    background: #3182ce !important;
+  }
