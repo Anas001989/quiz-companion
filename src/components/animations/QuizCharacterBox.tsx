@@ -9,7 +9,7 @@ import type { Character } from "@/context/StudentContext";
 export function QuizCharacterBox({
   character,
   actionJson,
-  loop,
+  loop = true,
   transparent = false,
 }: {
   character: Character | null;
@@ -22,25 +22,29 @@ export function QuizCharacterBox({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // dynamically fetch Lottie JSON
-  useEffect(() => {
-    let mounted = true;
-    const controller = new AbortController();
+  // Determine file type (.json = Lottie, .webp = animated image)
+  const src = actionJson ?? character?.file ?? null;
+  const isLottie = src?.toLowerCase().endsWith(".json");
+  const isWebP = src?.toLowerCase().endsWith(".webp");
 
-    const src = actionJson ?? character?.lottie ?? null;
-    if (!src) {
+  // Load Lottie JSON dynamically
+  useEffect(() => {
+    if (!isLottie) {
       setAnimationData(null);
       setLoading(false);
       setError(null);
       return;
     }
 
+    let mounted = true;
+    const controller = new AbortController();
+
     setLoading(true);
     setError(null);
 
     (async () => {
       try {
-        const res = await fetch(src, { signal: controller.signal });
+        const res = await fetch(src!, { signal: controller.signal });
         if (!res.ok) throw new Error(`Failed to load ${src} (${res.status})`);
         const json = await res.json();
         if (!mounted) return;
@@ -58,14 +62,7 @@ export function QuizCharacterBox({
       mounted = false;
       controller.abort();
     };
-  }, [actionJson, character]);
-
-  // determine loop behavior (keep your existing logic)
-  const srcPath = actionJson ?? character?.lottie ?? "";
-  const shouldLoop =
-    typeof loop === "boolean"
-      ? loop
-      : srcPath.toLowerCase().includes("idle") || !actionJson;
+  }, [src, isLottie]);
 
   if (!character) {
     return (
@@ -134,23 +131,37 @@ export function QuizCharacterBox({
       alignItems="center"
       justifyContent="center"
     >
-      {animationData ? (
+      {/* Lottie Animation */}
+      {isLottie && animationData ? (
         <Lottie
           lottieRef={playerRef}
           animationData={animationData}
-          loop={shouldLoop}
+          loop={loop}
           autoplay
           style={{
             width: "100%",
             height: "100%",
             background: transparent ? "transparent" : "white",
           }}
-          /*rendererSettings={{
-            clearCanvas,
-            preserveAspectRatio: "xMidYMid meet",
-          }}*/
         />
-      ) : (
+      ) : null}
+
+      {/* Animated WebP */}
+      {isWebP && (
+        <img
+          src={src!}
+          alt={character.name}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            background: "transparent",
+          }}
+        />
+      )}
+
+      {/* Fallback Thumbnail */}
+      {!isLottie && !isWebP && (
         <img
           src={character.thumbnail}
           alt={character.name}

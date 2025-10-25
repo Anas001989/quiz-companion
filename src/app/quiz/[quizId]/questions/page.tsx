@@ -38,6 +38,20 @@ const QUESTIONS = [
     options: ["2", "3", "4", "5"],
     correctAnswers: ["2", "3", "5"],
   },
+  {
+    id: 3,
+    question: "How much is 5 * 4?",
+    type: "SINGLE_CHOICE",
+    options: ["20", "30", "25", "15"],
+    correctAnswers: ["20"],
+  },
+  {
+    id: 4,
+    question: "How many trillions of stars are there in the sky?",
+    type: "SINGLE_CHOICE",
+    options: ["975", "973", "750", "Only God Knows"],
+    correctAnswers: ["Only God Knows"],
+  },
 ];
 
 export default function QuestionsPage({ params }: { params: Promise<{ quizId: string }> }) {
@@ -63,7 +77,7 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
 
   // helper: pick random action among main actions
   const pickRandomAction = () => {
-    const actions = ["walk", "run", "jump", "flip"];
+    const actions = ["walk", "run", "jump"];
     return actions[Math.floor(Math.random() * actions.length)];
   };
 
@@ -78,13 +92,14 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
       recordAttemptProgress(resolvedParams.quizId, { score: (student.attempts?.[resolvedParams.quizId]?.score || 0) + 1 });
     }
 
+    
     // Decide based on quizSettings
     const mode = quizSettings?.answerMode ?? "single-pass";
 
     if (mode === "single-pass") {
       // Always show stage in success mode (but visual can differ)
-      setStageMode(isCorrect ? "success" : "success"); // even incorrect crosses (teacher demanded)
-      setStageAction(isCorrect ? pickRandomAction() : pickRandomAction());
+      setStageMode(isCorrect ? "success" : "sad"); // even incorrect crosses (teacher demanded)
+      setStageAction(isCorrect ? pickRandomAction() : "sad");
       setShowStage(true);
     } else {
       // retry-until-correct
