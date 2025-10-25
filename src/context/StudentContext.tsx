@@ -6,7 +6,8 @@ export type Character = {
   id: string;
   name: string;
   thumbnail: string;
-  lottie?: string | null;
+  file?: string | null;
+  format: string;
 };
 
 export type QuizSettings = {
@@ -36,7 +37,7 @@ type StudentContextType = {
 
 const defaultStudent: Student = { fullName: "", nickname: "", selectedCharacter: null, attempts: {} };
 
-const defaultQuizSettings: QuizSettings = { answerMode: "single-pass", scene: "forest" };
+const defaultQuizSettings: QuizSettings = { answerMode: "retry-until-correct", scene: "forest" };
 
 const StudentContext = createContext<StudentContextType | undefined>(undefined);
 

@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Text } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import { QuizCharacterBox } from "@/components/animations/QuizCharacterBox";
 import { useStudent } from "@/context/StudentContext";
 
-const MotionBox = motion(Box);
+const MotionBox = motion.create(Box);
 
 type Mode = "success" | "sad";
 
@@ -14,21 +14,34 @@ export default function GameStageBox({
   mode,
   action,
   scene,
-  onComplete,
+  onComplete
 }: {
   mode: Mode;
   action: string;
-  scene?: "forest" | "beach" | "city";
+  scene?: string; // "forest" | "beach" | "city";
   onComplete: () => void;
 }) {
   const { student } = useStudent();
 
-  // --- (3) RANDOM SCENE SELECTION ---
+  /*// Random scene
   const chosenScene = useMemo(() => {
     if (scene) return scene;
     const scenes = ["forest", "beach", "city"];
     return scenes[Math.floor(Math.random() * scenes.length)];
   }, [scene]);
+*/
+const [chosenScene, setChosenScene] = useState<string>();
+
+  // Set random scene on component mount
+  useEffect(() => {
+   /* if (scene) {
+      setChosenScene(scene);
+    } else {*/
+      const scenes = ["forest", "beach", "city"] as const;
+      const randomScene = scenes[Math.floor(Math.random() * scenes.length)];
+      setChosenScene(randomScene);
+   // }
+  }, []);
 
   const sceneGif =
     chosenScene === "beach"
@@ -37,18 +50,26 @@ export default function GameStageBox({
       ? "/assets/scenes/city.gif"
       : "/assets/scenes/forest.gif";
 
-  // --- (1) LONGER MOVEMENT, LOOPED LOTTIE ---
-  // Character moves across the screen slowly (~5s)
+  // Character movement
   const startX = mode === "success" ? "-45vw" : "0vw";
-  const endX = mode === "success" ? "45vw" : "0vw";
-  const transition = { duration: 5.5};
+  const endX = mode === "success" ? "120vw" : "0vw";
+  const transition = { duration: 5 };
 
-  // End the stage after movement finishes
+  // Trigger onComplete after animation
   useEffect(() => {
     const timeout = setTimeout(() => onComplete(), transition.duration * 1000);
     return () => clearTimeout(timeout);
   }, [onComplete, transition.duration]);
 
+  // Support WebP or Lottie dynamically
+  const character = student.selectedCharacter ?? null;
+  const basePath = `/lottie/${character?.id}_${action}`;
+  const lottiePath = `${basePath}.json`;
+  const webpPath = `${basePath}.webp`;
+  const animationSrc = character
+    ? `${basePath}.${character?.format ?? "json"}`
+    : lottiePath;
+    
   return (
     <Box
       position="fixed"
@@ -69,7 +90,7 @@ export default function GameStageBox({
         filter="brightness(0.95)"
       />
 
-      {/* --- (2) TRANSPARENT LOTTIE CHARACTER --- */}
+      {/* Moving Character */}
       <Box
         position="relative"
         width="80%"
@@ -94,8 +115,8 @@ export default function GameStageBox({
           }}
         >
           <QuizCharacterBox
-            character={student.selectedCharacter ?? null}
-            actionJson={`/lottie/${student.selectedCharacter?.id}_${action}.json`}
+            character={character}
+            actionJson={webpPath} // ✅ use WebP first, fallback handled inside
             loop
             transparent
           />
