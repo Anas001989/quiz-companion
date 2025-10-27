@@ -8,8 +8,8 @@ import {
   VStack,
   Text,
   Stack,
-  Button,
 } from "@chakra-ui/react";
+import FunButton from "@/components/ui/FunButton";
 import {
   RadioGroup,
   Radio,
@@ -190,16 +190,16 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
           </CheckboxGroup>
         )}
 
-        <Button
+        <FunButton
           mt={6}
-          colorScheme="blue"
+          variant="solid"
           width="full"
           size="lg"
           onClick={handleSubmit}
           disabled={answers.length === 0}
         >
           Submit Answer
-        </Button>
+        </FunButton>
       </Box>
     </Box>
   );
