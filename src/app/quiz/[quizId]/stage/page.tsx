@@ -1,7 +1,8 @@
 "use client";
 
 import React, { use } from "react";
-import { Box, Heading, Text, VStack, Button } from "@chakra-ui/react";
+import { Box, Heading, Text, VStack } from "@chakra-ui/react";
+import FunButton from "@/components/ui/FunButton";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useStudent } from "@/context/StudentContext";
 
@@ -29,7 +30,7 @@ export default function StagePage({ params }: { params: Promise<{ quizId: string
           <>
             <Text fontSize="xl">Congratulations, {student.fullName || "Student"}!</Text>
             <Text fontWeight="bold">Your score: {student.attempts?.[resolvedParams.quizId]?.score ?? 0} / (questions)</Text>
-            <Button onClick={handlePlayAgain} colorScheme="blue">Play Again</Button>
+            <FunButton onClick={handlePlayAgain} variant="solid">Play Again</FunButton>
           </>
         ) : (
           <>

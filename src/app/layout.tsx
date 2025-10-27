@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { StudentProvider } from '@/context/StudentContext';
+import { TeacherProvider } from '@/context/TeacherContext';
 import ChakraWrapper from "@/lib/chakra-provider";
+import NavBar from "@/components/layout/NavBar";
 import "@/styles/globals.css";
 
 const geistSans = Geist({
@@ -32,7 +34,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ChakraWrapper>
-          <StudentProvider>{children}</StudentProvider>
+          <StudentProvider>
+            <TeacherProvider>
+              <NavBar />
+              {children}
+            </TeacherProvider>
+          </StudentProvider>
         </ChakraWrapper>
       </body>
     </html>
