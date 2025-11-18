@@ -13,20 +13,20 @@ This document contains Mermaid diagrams that can be rendered in:
 ```mermaid
 graph TB
     subgraph "Client Layer"
-        T[Teacher UI<br/>Dashboard]
-        S[Student UI<br/>Quiz Taking]
-        C[Character<br/>Animations]
+        T["Teacher UI - Dashboard"]
+        S["Student UI - Quiz Taking"]
+        C["Character Animations"]
     end
     
     subgraph "Application Layer - Next.js"
-        API[API Routes<br/>Serverless Functions]
-        PR[Prisma ORM<br/>Client]
+        API["API Routes - Serverless Functions"]
+        PR["Prisma ORM Client"]
     end
     
     subgraph "External Services"
-        DB[(PostgreSQL<br/>Database)]
-        AI[OpenAI API<br/>GPT-4o-mini]
-        SB[Supabase<br/>Hosting]
+        DB[("PostgreSQL Database")]
+        AI["OpenAI API - GPT-4o-mini"]
+        SB["Supabase Hosting"]
     end
     
     T --> API
@@ -120,19 +120,19 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start([Teacher clicks<br/>AI Generate]) --> Input[Enter Description<br/>& Question Counts]
-    Input --> Validate{Validate<br/>Inputs}
+    Start([Teacher clicks AI Generate]) --> Input["Enter Description & Question Counts"]
+    Input --> Validate{Validate Inputs}
     Validate -->|Invalid| Error[Show Error]
-    Validate -->|Valid| CallAPI[POST /api/teacher/quiz/<br/>[id]/generate-questions]
-    CallAPI --> OpenAI[Call OpenAI API<br/>GPT-4o-mini]
+    Validate -->|Valid| CallAPI["POST /api/teacher/quiz/[id]/generate-questions"]
+    CallAPI --> OpenAI["Call OpenAI API GPT-4o-mini"]
     OpenAI --> Parse[Parse JSON Response]
-    Parse --> Check{Validate<br/>Questions}
-    Check -->|Invalid| Retry[Show Error<br/>Option to Retry]
-    Check -->|Valid| Preview[Show Preview<br/>Modal]
-    Preview --> Review{Teacher<br/>Reviews}
+    Parse --> Check{Validate Questions}
+    Check -->|Invalid| Retry["Show Error - Option to Retry"]
+    Check -->|Valid| Preview[Show Preview Modal]
+    Preview --> Review{Teacher Reviews}
     Review -->|Regenerate| CallAPI
-    Review -->|Approve| Save[Save Questions<br/>to Database]
-    Save --> Success[Show Success<br/>Message]
+    Review -->|Approve| Save["Save Questions to Database"]
+    Save --> Success[Show Success Message]
     Error --> Start
     Retry --> Start
     Success --> End([Quiz Ready])
@@ -265,19 +265,19 @@ graph TD
 ```mermaid
 graph LR
     subgraph "Database Layer"
-        IDX[Strategic Indexes<br/>Foreign Keys<br/>Frequently Queried Fields]
-        POOL[Connection Pooling<br/>via Supabase]
+        IDX["Strategic Indexes - Foreign Keys - Frequently Queried Fields"]
+        POOL["Connection Pooling via Supabase"]
     end
     
     subgraph "Query Optimization"
-        COUNT[Use _count<br/>Instead of Loading<br/>Full Relations]
-        SELECT[Selective Field<br/>Queries]
-        BATCH[Batch Operations<br/>for Answer Creation]
+        COUNT["Use _count Instead of Loading Full Relations"]
+        SELECT["Selective Field Queries"]
+        BATCH["Batch Operations for Answer Creation"]
     end
     
     subgraph "Client Optimization"
-        CTX[React Context<br/>for State Management]
-        MEMO[Component Memoization<br/>Prevent Unnecessary Renders]
+        CTX["React Context for State Management"]
+        MEMO["Component Memoization - Prevent Unnecessary Renders"]
     end
     
     IDX --> COUNT
