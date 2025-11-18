@@ -18,6 +18,7 @@ import {
 import FunButton from '@/components/ui/FunButton';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTeacher } from '@/context/TeacherContext';
+import QuizAttemptsModal from '@/components/dashboard/QuizAttemptsModal';
 
 interface Quiz {
   id: string;
@@ -35,6 +36,9 @@ export default function TeacherDashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [message, setMessage] = useState('');
   const [teacherId, setTeacherId] = useState<string | null>(null);
+  const [copiedQuizId, setCopiedQuizId] = useState<string | null>(null);
+  const [attemptsModalOpen, setAttemptsModalOpen] = useState(false);
+  const [selectedQuizForAttempts, setSelectedQuizForAttempts] = useState<Quiz | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { teacher, logout } = useTeacher();
@@ -55,12 +59,10 @@ export default function TeacherDashboard() {
   const fetchQuizzes = async (teacherId: string) => {
     try {
       setLoading(true);
-      console.log('Fetching quizzes for teacher ID:', teacherId);
       const response = await fetch(`/api/teacher/quizzes?teacherId=${teacherId}`);
       const data = await response.json();
       
       if (response.ok) {
-        console.log('Quizzes fetched successfully:', data.quizzes);
         setQuizzes(data.quizzes);
       } else {
         console.error('Failed to fetch quizzes:', data);
@@ -90,8 +92,6 @@ export default function TeacherDashboard() {
     try {
       setCreatingQuiz(true);
       setMessage(''); // Clear any previous messages
-      
-      console.log('Creating quiz with:', { title: newQuizTitle, teacherId });
       
       const response = await fetch('/api/teacher/quizzes', {
         method: 'POST',
@@ -132,6 +132,33 @@ export default function TeacherDashboard() {
     } else {
       router.push(`/teacher/quiz/${quizId}/questions`);
     }
+  };
+
+  const handleShareQuiz = async (quiz: Quiz, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    const url = getQuizUrl(quiz.id);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedQuizId(quiz.id);
+      setMessage(`Quiz link copied to clipboard!`);
+      setTimeout(() => {
+        setCopiedQuizId(null);
+        setMessage('');
+      }, 3000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      setMessage('Failed to copy URL to clipboard');
+    }
+  };
+
+  const getQuizUrl = (quizId: string) => {
+    if (typeof window !== 'undefined') {
+      const baseUrl = window.location.origin;
+      return `${baseUrl}/student?quizId=${quizId}`;
+    }
+    return '';
   };
 
   const formatDate = (dateString: string) => {
@@ -247,21 +274,43 @@ export default function TeacherDashboard() {
                     <Badge colorScheme="blue" variant="subtle">
                       {quiz.questionCount} questions
                     </Badge>
-                    <Badge colorScheme="green" variant="subtle">
+                    <Badge
+                      colorScheme="green"
+                      variant="subtle"
+                      cursor="pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedQuizForAttempts(quiz);
+                        setAttemptsModalOpen(true);
+                      }}
+                      _hover={{ bg: 'green.100' }}
+                    >
                       {quiz.attemptCount} attempts
                     </Badge>
                   </HStack>
 
-                  <FunButton
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleQuizClick(quiz.id);
-                    }}
-                  >
-                    Manage Questions
-                  </FunButton>
+                  <HStack gap={2} w="full">
+                    <FunButton
+                      size="sm"
+                      variant="outline"
+                      flex={1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuizClick(quiz.id);
+                      }}
+                    >
+                      Manage Questions
+                    </FunButton>
+                    <IconButton
+                      aria-label="Share quiz"
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => handleShareQuiz(quiz, e)}
+                      colorScheme={copiedQuizId === quiz.id ? "green" : undefined}
+                    >
+                      {copiedQuizId === quiz.id ? "✓" : "🔗"}
+                    </IconButton>
+                  </HStack>
                 </VStack>
               </Box>
             ))}
@@ -328,6 +377,19 @@ export default function TeacherDashboard() {
             </VStack>
           </Box>
         </Box>
+      )}
+
+      {/* Quiz Attempts Modal */}
+      {selectedQuizForAttempts && (
+        <QuizAttemptsModal
+          quizId={selectedQuizForAttempts.id}
+          quizTitle={selectedQuizForAttempts.title}
+          isOpen={attemptsModalOpen}
+          onClose={() => {
+            setAttemptsModalOpen(false);
+            setSelectedQuizForAttempts(null);
+          }}
+        />
       )}
     </Container>
   );

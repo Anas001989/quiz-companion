@@ -3,53 +3,58 @@ import { prisma } from '@/lib/prisma/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { quizId: string } }
+  { params }: { params: Promise<{ quizId: string }> }
 ) {
   try {
-    const { quizId } = params
-
-    console.log('Fetching quiz questions for quiz ID:', quizId)
+    const { quizId } = await params
 
     if (!quizId) {
       return NextResponse.json({ error: 'Quiz ID is required' }, { status: 400 })
     }
 
+    // Optimized query - only select needed fields
     const quiz = await prisma.quiz.findUnique({
       where: {
         id: quizId
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        answerMode: true,
         questions: {
-          include: {
-            options: true
+          select: {
+            id: true,
+            text: true,
+            type: true,
+            options: {
+              select: {
+                id: true,
+                text: true,
+                isCorrect: true
+              },
+              orderBy: {
+                id: 'asc'
+              }
+            }
+          },
+          orderBy: {
+            id: 'asc'
           }
         }
       }
     })
 
-    console.log('Quiz found:', quiz ? { id: quiz.id, title: quiz.title, questionCount: quiz.questions.length } : 'Not found')
-
     if (!quiz) {
       return NextResponse.json({ error: 'Quiz not found' }, { status: 404 })
     }
 
-    // Transform the data to match the frontend interface
+    // Quiz data is already in the right format (no transformation needed)
     const transformedQuiz = {
       id: quiz.id,
       title: quiz.title,
-      questions: quiz.questions.map(question => ({
-        id: question.id,
-        text: question.text,
-        type: question.type as 'SINGLE_CHOICE' | 'MULTI_CHOICE' | 'MIXED',
-        options: question.options.map(option => ({
-          id: option.id,
-          text: option.text,
-          isCorrect: option.isCorrect
-        }))
-      }))
+      answerMode: quiz.answerMode || 'retry-until-correct',
+      questions: quiz.questions
     }
-
-    console.log('Transformed quiz:', { id: transformedQuiz.id, title: transformedQuiz.title, questionCount: transformedQuiz.questions.length })
 
     return NextResponse.json({ quiz: transformedQuiz })
   } catch (error) {
@@ -63,14 +68,12 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { quizId: string } }
+  { params }: { params: Promise<{ quizId: string }> }
 ) {
   try {
-    const { quizId } = params
+    const { quizId } = await params
     const body = await request.json()
     const { text, type, options } = body
-
-    console.log('Creating question for quiz ID:', quizId)
 
     if (!quizId) {
       return NextResponse.json({ error: 'Quiz ID is required' }, { status: 400 })
@@ -94,8 +97,6 @@ export async function POST(
         options: true
       }
     })
-
-    console.log('Question created successfully:', question)
 
     return NextResponse.json({ question })
   } catch (error) {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Box,
   Container,
@@ -15,12 +15,23 @@ import {
   FormLabel,
 } from "@chakra-ui/form-control";
 import { useToast } from "@chakra-ui/toast";
+import { useStudent } from "@/context/StudentContext";
 
 export default function StudentPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
+  const { setStudent } = useStudent();
   const [fullName, setFullName] = useState("");
   const [nickname, setNickname] = useState("");
+  const [quizId, setQuizId] = useState<string | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
+  
+  // Only render form after hydration to prevent hydration errors from browser extensions
+  useEffect(() => {
+    setIsHydrated(true);
+    setQuizId(searchParams.get("quizId"));
+  }, [searchParams]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,9 +47,16 @@ export default function StudentPage() {
       return;
     }
 
-    const quizId = "demo-quiz";
-    const params = new URLSearchParams({ fullName, nickname });
-    router.push(`/quiz/${quizId}/select-character/?${params.toString()}`);
+    // Save student info to context
+    setStudent({
+      fullName: fullName.trim(),
+      nickname: nickname.trim() || undefined,
+      selectedCharacter: null,
+    });
+
+    // Redirect to quiz if quizId is provided, otherwise to demo quiz
+    const targetQuizId = quizId || "demo-quiz";
+    router.push(`/quiz/${targetQuizId}/select-character`);
   };
 
   return (
@@ -69,39 +87,45 @@ export default function StudentPage() {
             Welcome to Quiz Companion 🧠
           </Heading>
 
-          <form onSubmit={handleSubmit} className="w-full">
-            <VStack gap={4}>
-              <FormControl isRequired>
-                <FormLabel>Full Name</FormLabel>
-                <Input
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Enter your full name"
-                  _focus={{ borderColor: "blue.400" }}
-                />
-              </FormControl>
+          <div suppressHydrationWarning>
+            {isHydrated ? (
+              <form onSubmit={handleSubmit} className="w-full">
+                <VStack gap={4}>
+                  <FormControl isRequired>
+                    <FormLabel>Full Name</FormLabel>
+                    <Input
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Enter your full name"
+                      _focus={{ borderColor: "blue.400" }}
+                    />
+                  </FormControl>
 
-              <FormControl>
-                <FormLabel>Nickname (optional)</FormLabel>
-                <Input
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  placeholder="Enter a nickname"
-                  _focus={{ borderColor: "blue.400" }}
-                />
-              </FormControl>
+                  <FormControl>
+                    <FormLabel>Nickname (optional)</FormLabel>
+                    <Input
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      placeholder="Enter a nickname"
+                      _focus={{ borderColor: "blue.400" }}
+                    />
+                  </FormControl>
 
-              <FunButton
-                type="submit"
-                variant="solid"
-                width="full"
-                size="lg"
-                className="font-semibold"
-              >
-                Start Quiz
-              </FunButton>
-            </VStack>
-          </form>
+                  <FunButton
+                    type="submit"
+                    variant="solid"
+                    width="full"
+                    size="lg"
+                    className="font-semibold"
+                  >
+                    Start Quiz
+                  </FunButton>
+                </VStack>
+              </form>
+            ) : (
+              <div style={{ minHeight: "200px" }} aria-hidden="true" />
+            )}
+          </div>
         </VStack>
       </Container>
     </Box>

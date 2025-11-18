@@ -37,9 +37,13 @@ model Quiz {
   title     String
   teacher   Teacher    @relation(fields: [teacherId], references: [id])
   teacherId String
+  answerMode String   @default("retry-until-correct") // "single-pass" or "retry-until-correct"
   questions Question[]
   attempts  Attempt[]
   createdAt DateTime   @default(now())
+
+  @@index([teacherId])
+  @@index([createdAt])
 }
 
 model Question {
@@ -50,6 +54,8 @@ model Question {
   quizId     String
   options    Option[]
   answers    Answer[]  // 🔥 added opposite relation
+
+  @@index([quizId])
 }
 
 model Option {
@@ -59,6 +65,8 @@ model Option {
   question   Question  @relation(fields: [questionId], references: [id])
   questionId String
   answers    Answer[]  // 🔥 added opposite relation
+
+  @@index([questionId])
 }
 
 model Attempt {
@@ -70,6 +78,10 @@ model Attempt {
   answers   Answer[]
   score     Int
   createdAt DateTime    @default(now())
+
+  @@index([quizId])
+  @@index([studentId])
+  @@index([createdAt])
 }
 
 model Answer {
@@ -80,10 +92,12 @@ model Answer {
   questionId String
   option     Option?   @relation(fields: [optionId], references: [id])
   optionId   String?
+
+  @@index([attemptId])
+  @@index([questionId])
 }
 
 enum QuestionType {
   SINGLE_CHOICE
   MULTI_CHOICE
-  MIXED
 }

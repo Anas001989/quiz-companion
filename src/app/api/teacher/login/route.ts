@@ -6,8 +6,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email } = body
 
-    console.log('Login attempt for email:', email)
-
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }
@@ -18,8 +16,6 @@ export async function POST(request: NextRequest) {
         email: email
       }
     })
-
-    console.log('Teacher found:', teacher ? { id: teacher.id, name: teacher.name, email: teacher.email } : 'Not found')
 
     if (!teacher) {
       return NextResponse.json({ error: 'Teacher not found' }, { status: 404 })

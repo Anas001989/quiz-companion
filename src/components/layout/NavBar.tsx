@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useTeacher } from "@/context/TeacherContext";
 import {
@@ -19,7 +19,13 @@ export default function NavBar() {
   const router = useRouter();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
   const { teacher, logout, isLoggedIn } = useTeacher();
+  
+  // Only render interactive elements after hydration to prevent hydration errors from browser extensions
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   const navItems = [
     { label: "Home", href: "/" },
@@ -66,22 +72,26 @@ export default function NavBar() {
           </HStack>
 
           {/* Desktop Navigation */}
-          <HStack gap={2} display={{ base: "none", md: "flex" }}>
-            {navItems.map((item) => (
+          <HStack gap={2} display={{ base: "none", md: "flex" }} suppressHydrationWarning>
+            {isHydrated && navItems.map((item) => (
               <NavLink key={item.href} item={item} />
             ))}
           </HStack>
 
           {/* Mobile Menu Button */}
-          <IconButton
-            display={{ base: "flex", md: "none" }}
-            onClick={() => setIsOpen(true)}
-            variant="ghost"
-            aria-label="Open menu"
-            fontSize="xl"
-          >
-            ☰
-          </IconButton>
+          <div suppressHydrationWarning>
+            {isHydrated && (
+              <IconButton
+                display={{ base: "flex", md: "none" }}
+                onClick={() => setIsOpen(true)}
+                variant="ghost"
+                aria-label="Open menu"
+                fontSize="xl"
+              >
+                ☰
+              </IconButton>
+            )}
+          </div>
         </Flex>
       </Container>
 

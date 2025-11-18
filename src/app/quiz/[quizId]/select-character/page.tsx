@@ -1,7 +1,8 @@
 "use client";
 
-import React, { use } from "react";
+import React, { use, useEffect } from "react";
 import { Box, Heading } from "@chakra-ui/react";
+import { useRouter } from "next/navigation";
 import CharacterPicker from "@/components/quiz/CharacterPicker";
 import { useStudent } from "@/context/StudentContext";
 
@@ -13,7 +14,16 @@ const CHARACTERS = [
 
 export default function SelectCharacterPage({ params }: { params: Promise<{ quizId: string }> }) {
   const resolvedParams = use(params);
-  const { selectCharacter } = useStudent();
+  const router = useRouter();
+  const { selectCharacter, student } = useStudent();
+
+  // Redirect to student login if not logged in
+  useEffect(() => {
+    if (!student.fullName) {
+      const params = new URLSearchParams({ quizId: resolvedParams.quizId });
+      router.push(`/student?${params.toString()}`);
+    }
+  }, [student.fullName, resolvedParams.quizId, router]);
 
   return (
     <Box p={8} textAlign="center">

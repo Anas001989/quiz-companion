@@ -11,15 +11,27 @@ import {
   Text,
   VStack,
   Badge,
-  IconButton
+  IconButton,
+  useDisclosure
 } from '@chakra-ui/react';
+import {
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  ModalCloseButton
+} from '@chakra-ui/modal';
 import FunButton from '@/components/ui/FunButton';
+import QuestionForm from '@/components/forms/QuestionForm';
+import AIGenerateQuestionsModal from '@/components/forms/AIGenerateQuestionsModal';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 
 interface Question {
   id: string;
   text: string;
-  type: 'SINGLE_CHOICE' | 'MULTI_CHOICE' | 'MIXED';
+  type: 'SINGLE_CHOICE' | 'MULTI_CHOICE';
   options: Option[];
 }
 
@@ -32,6 +44,7 @@ interface Option {
 interface Quiz {
   id: string;
   title: string;
+  answerMode?: string;
   questions: Question[];
 }
 
@@ -39,6 +52,13 @@ export default function QuizQuestionsPage() {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const { open: isFormOpen, onOpen: onFormOpen, onClose: onFormClose } = useDisclosure();
+  const { open: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
+  const { open: isShareOpen, onOpen: onShareOpen, onClose: onShareClose } = useDisclosure();
+  const { open: isAIGenerateOpen, onOpen: onAIGenerateOpen, onClose: onAIGenerateClose } = useDisclosure();
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -70,53 +90,124 @@ export default function QuizQuestionsPage() {
     }
   };
 
-  const handleAddQuestion = async () => {
-    try {
-      setMessage('Creating sample question...');
-      
-      // Create a sample question for testing
-      const sampleQuestion = {
-        text: 'What is the capital of France?',
-        type: 'SINGLE_CHOICE',
-        options: [
-          { text: 'Paris', isCorrect: true },
-          { text: 'London', isCorrect: false },
-          { text: 'Berlin', isCorrect: false },
-          { text: 'Madrid', isCorrect: false }
-        ]
-      };
+  const handleAddQuestion = () => {
+    setEditingQuestion(null);
+    onFormOpen();
+  };
 
-      const response = await fetch(`/api/teacher/quiz/${quizId}/questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(sampleQuestion),
+  const handleEditQuestion = (questionId: string) => {
+    const question = quiz?.questions.find(q => q.id === questionId);
+    if (question) {
+      setEditingQuestion(question);
+      onFormOpen();
+    }
+  };
+
+  const handleSaveQuestion = async (questionData: {
+    text: string;
+    type: 'SINGLE_CHOICE' | 'MULTI_CHOICE';
+    options: Array<{ text: string; isCorrect: boolean }>;
+  }) => {
+    try {
+      if (editingQuestion) {
+        // Update existing question
+        const response = await fetch(`/api/teacher/quiz/${quizId}/questions/${editingQuestion.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(questionData),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setMessage('Question updated successfully!');
+          onFormClose();
+          setEditingQuestion(null);
+          await fetchQuiz();
+        } else {
+          throw new Error(data.error || 'Failed to update question');
+        }
+      } else {
+        // Create new question
+        const response = await fetch(`/api/teacher/quiz/${quizId}/questions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(questionData),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setMessage('Question added successfully!');
+          onFormClose();
+          await fetchQuiz();
+        } else {
+          throw new Error(data.error || 'Failed to add question');
+        }
+      }
+    } catch (error) {
+      console.error('Error saving question:', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteQuestion = (questionId: string) => {
+    setDeletingQuestionId(questionId);
+    onDeleteOpen();
+  };
+
+  const confirmDeleteQuestion = async () => {
+    if (!deletingQuestionId) return;
+
+    try {
+      const response = await fetch(`/api/teacher/quiz/${quizId}/questions/${deletingQuestionId}`, {
+        method: 'DELETE',
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setMessage('Sample question added successfully! Refreshing...');
-        // Refresh the quiz data
-        setTimeout(() => {
-          fetchQuiz();
-        }, 1000);
+        setMessage('Question deleted successfully!');
+        onDeleteClose();
+        setDeletingQuestionId(null);
+        await fetchQuiz();
       } else {
-        setMessage(`Failed to add question: ${data.error || 'Unknown error'}`);
+        setMessage(`Failed to delete question: ${data.error || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Error adding question:', error);
-      setMessage('Failed to add question. Please try again.');
+      console.error('Error deleting question:', error);
+      setMessage('Failed to delete question. Please try again.');
     }
   };
 
-  const handleEditQuestion = (questionId: string) => {
-    setMessage('Question editing will be available soon');
+  const getQuizUrl = () => {
+    if (typeof window !== 'undefined') {
+      const baseUrl = window.location.origin;
+      return `${baseUrl}/student?quizId=${quizId}`;
+    }
+    return '';
   };
 
-  const handleDeleteQuestion = (questionId: string) => {
-    setMessage('Question deletion will be available soon');
+  const handleCopyToClipboard = async () => {
+    const url = getQuizUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      setMessage('Quiz link copied to clipboard!');
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      setMessage('Failed to copy URL to clipboard');
+    }
+  };
+
+  const handleShareQuiz = () => {
+    setCopied(false);
+    onShareOpen();
   };
 
   if (loading) {
@@ -165,9 +256,22 @@ export default function QuizQuestionsPage() {
           <HStack gap={3}>
             <FunButton
               variant="solid"
+              onClick={onAIGenerateOpen}
+              colorScheme="purple"
+            >
+              🤖 Generate Questions With AI
+            </FunButton>
+            <FunButton
+              variant="solid"
               onClick={handleAddQuestion}
             >
               + Add Question
+            </FunButton>
+            <FunButton
+              variant="outline"
+              onClick={handleShareQuiz}
+            >
+              🔗 Share Quiz
             </FunButton>
             <FunButton
               variant="outline"
@@ -195,11 +299,192 @@ export default function QuizQuestionsPage() {
 
         {/* Message Display */}
         {message && (
-          <Box p={4} bg={message.includes('successfully') ? 'green.50' : 'blue.50'} borderRadius="md">
-            <Text color={message.includes('successfully') ? 'green.600' : 'blue.600'}>
+          <Box p={4} bg={message.includes('successfully') ? 'green.50' : message.includes('Failed') ? 'red.50' : 'blue.50'} borderRadius="md">
+            <Text color={message.includes('successfully') ? 'green.600' : message.includes('Failed') ? 'red.600' : 'blue.600'}>
               {message}
             </Text>
           </Box>
+        )}
+
+        {/* Answer Mode Settings */}
+        <Box p={6} bg="white" borderRadius="md" shadow="sm">
+          <VStack gap={4} align="stretch">
+            <Text fontWeight="bold" fontSize="lg">Quiz Settings</Text>
+            <HStack gap={4}>
+              <Text fontWeight="medium">Answer Mode:</Text>
+              <HStack gap={2}>
+                <FunButton
+                  variant={quiz?.answerMode === 'single-pass' ? 'solid' : 'outline'}
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(`/api/teacher/quiz/${quizId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ answerMode: 'single-pass' })
+                      });
+                      const data = await response.json();
+                      if (response.ok) {
+                        setQuiz(prev => prev ? { ...prev, answerMode: 'single-pass' } : null);
+                        setMessage('Answer mode updated successfully!');
+                      } else {
+                        setMessage(`Failed to update answer mode: ${data.error || data.details || 'Unknown error'}`);
+                      }
+                    } catch (error: any) {
+                      console.error('Error updating answer mode:', error);
+                      setMessage(`Failed to update answer mode: ${error?.message || 'Network error'}`);
+                    }
+                  }}
+                >
+                  Single Pass
+                </FunButton>
+                <FunButton
+                  variant={quiz?.answerMode === 'retry-until-correct' ? 'solid' : 'outline'}
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(`/api/teacher/quiz/${quizId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ answerMode: 'retry-until-correct' })
+                      });
+                      const data = await response.json();
+                      if (response.ok) {
+                        setQuiz(prev => prev ? { ...prev, answerMode: 'retry-until-correct' } : null);
+                        setMessage('Answer mode updated successfully!');
+                      } else {
+                        setMessage(`Failed to update answer mode: ${data.error || data.details || 'Unknown error'}`);
+                      }
+                    } catch (error: any) {
+                      console.error('Error updating answer mode:', error);
+                      setMessage(`Failed to update answer mode: ${error?.message || 'Network error'}`);
+                    }
+                  }}
+                >
+                  Retry Until Correct
+                </FunButton>
+              </HStack>
+            </HStack>
+            <Text fontSize="sm" color="gray.600">
+              {quiz?.answerMode === 'single-pass' 
+                ? 'Students can only answer each question once. They will move to the next question regardless of correctness.'
+                : 'Students must answer correctly before moving to the next question. They can retry incorrect answers.'}
+            </Text>
+          </VStack>
+        </Box>
+
+        {/* Question Form Modal */}
+        <QuestionForm
+          isOpen={isFormOpen}
+          onClose={() => {
+            onFormClose();
+            setEditingQuestion(null);
+          }}
+          onSave={handleSaveQuestion}
+          question={editingQuestion}
+          quizId={quizId}
+        />
+
+        {/* AI Generate Questions Modal */}
+        <AIGenerateQuestionsModal
+          isOpen={isAIGenerateOpen}
+          onClose={onAIGenerateClose}
+          quizId={quizId}
+          onQuestionsGenerated={async (questions) => {
+            try {
+              // Save all generated questions
+              for (const question of questions) {
+                await fetch(`/api/teacher/quiz/${quizId}/questions`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(question)
+                });
+              }
+              setMessage(`Successfully added ${questions.length} questions!`);
+              fetchQuiz();
+            } catch (error) {
+              setMessage('Failed to save generated questions');
+            }
+          }}
+        />
+
+        {/* Delete Confirmation Dialog */}
+        <Modal isOpen={isDeleteOpen} onClose={onDeleteClose} size="md" isCentered>
+          <ModalOverlay bg="#514b52b8" />
+          <ModalContent bg="white" p={0}>
+            <ModalHeader fontSize="lg" fontWeight="bold" p={6} pb={4}>
+              Delete Question
+            </ModalHeader>
+            <ModalCloseButton top={4} right={4} />
+            <ModalBody p={6} pt={0}>
+              <Text>
+                Are you sure you want to delete this question? This action cannot be undone.
+              </Text>
+            </ModalBody>
+            <ModalFooter p={6} pt={4}>
+              <HStack gap={3}>
+                <FunButton onClick={onDeleteClose} variant="outline">
+                  Cancel
+                </FunButton>
+                <FunButton
+                  onClick={confirmDeleteQuestion}
+                  variant="solid"
+                  bg="red.500"
+                  color="white"
+                  _hover={{ bg: "red.600" }}
+                >
+                  Delete
+                </FunButton>
+              </HStack>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+
+        {/* Share Quiz Modal */}
+        {quiz && (
+          <Modal isOpen={isShareOpen} onClose={onShareClose} size="md" isCentered>
+          <ModalOverlay bg="#514b52b8" />
+          <ModalContent bg="white" p={0}>
+              <ModalHeader p={6} pb={4}>Share Quiz: {quiz.title}</ModalHeader>
+              <ModalCloseButton top={4} right={4} />
+              <ModalBody p={6} pt={0}>
+                <VStack gap={4} align="stretch">
+                  <Text fontSize="sm" color="gray.600">
+                    Share this link with your students to let them take the quiz:
+                  </Text>
+                  <Box
+                    p={3}
+                    bg="gray.50"
+                    borderRadius="md"
+                    border="1px solid"
+                    borderColor="gray.200"
+                    w="full"
+                  >
+                    <Text
+                      fontSize="sm"
+                      fontFamily="mono"
+                      wordBreak="break-all"
+                      color="gray.700"
+                    >
+                      {getQuizUrl()}
+                    </Text>
+                  </Box>
+                  <FunButton
+                    variant="solid"
+                    w="full"
+                    onClick={handleCopyToClipboard}
+                  >
+                    {copied ? '✓ Copied!' : '📋 Copy Link'}
+                  </FunButton>
+                </VStack>
+              </ModalBody>
+              <ModalFooter p={6} pt={4}>
+                <FunButton variant="outline" onClick={onShareClose}>
+                  Close
+                </FunButton>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
         )}
 
         {/* Questions List */}

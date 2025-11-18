@@ -10,19 +10,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Teacher ID is required' }, { status: 400 })
     }
 
+    // Optimized query using _count instead of loading all records
     const quizzes = await prisma.quiz.findMany({
       where: {
         teacherId: teacherId
       },
-      include: {
-        questions: {
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        _count: {
           select: {
-            id: true
-          }
-        },
-        attempts: {
-          select: {
-            id: true
+            questions: true,
+            attempts: true
           }
         }
       },
@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
       id: quiz.id,
       title: quiz.title,
       createdAt: quiz.createdAt,
-      questionCount: quiz.questions.length,
-      attemptCount: quiz.attempts.length
+      questionCount: quiz._count.questions,
+      attemptCount: quiz._count.attempts
     }))
 
     return NextResponse.json({ quizzes: quizzesWithStats })
@@ -51,8 +51,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { title, teacherId } = body
 
-    console.log('Creating quiz with:', { title, teacherId })
-
     if (!title || !teacherId) {
       return NextResponse.json({ error: 'Title and teacher ID are required' }, { status: 400 })
     }
@@ -63,7 +61,6 @@ export async function POST(request: NextRequest) {
     })
 
     if (!teacher) {
-      console.error('Teacher not found:', teacherId)
       return NextResponse.json({ error: 'Teacher not found' }, { status: 404 })
     }
 
@@ -74,7 +71,6 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    console.log('Quiz created successfully:', quiz)
     return NextResponse.json({ quiz })
   } catch (error) {
     console.error('Error creating quiz:', error)

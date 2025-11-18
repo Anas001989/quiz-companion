@@ -22,58 +22,116 @@ import { useToast } from "@chakra-ui/toast";
 import { useStudent } from "@/context/StudentContext";
 import GameStageBox from "@/components/quiz/GameStageBox";
 
-// Temporary mock questions — later we’ll fetch from Supabase
-const QUESTIONS = [
-  {
-    id: 1,
-    question: "Which planet is known as the Red Planet?",
-    type: "SINGLE_CHOICE",
-    options: ["Earth", "Mars", "Jupiter", "Venus"],
-    correctAnswers: ["Mars"],
-  },
-  {
-    id: 2,
-    question: "Select all prime numbers:",
-    type: "MULTI_CHOICE",
-    options: ["2", "3", "4", "5"],
-    correctAnswers: ["2", "3", "5"],
-  },
-  {
-    id: 3,
-    question: "How much is 5 * 4?",
-    type: "SINGLE_CHOICE",
-    options: ["20", "30", "25", "15"],
-    correctAnswers: ["20"],
-  },
-  {
-    id: 4,
-    question: "How many trillions of stars are there in the sky?",
-    type: "SINGLE_CHOICE",
-    options: ["975", "973", "750", "Only God Knows"],
-    correctAnswers: ["Only God Knows"],
-  },
-];
+interface Question {
+  id: string;
+  text: string;
+  type: 'SINGLE_CHOICE' | 'MULTI_CHOICE';
+  options: Array<{
+    id: string;
+    text: string;
+    isCorrect: boolean;
+  }>;
+}
 
 export default function QuestionsPage({ params }: { params: Promise<{ quizId: string }> }) {
   const resolvedParams = use(params);
-  const { student, quizSettings, recordAttemptProgress } = useStudent();
+  const { student, quizSettings, setQuizSettings, recordAttemptProgress } = useStudent();
   const router = useRouter();
   const toast = useToast();
 
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [quizAnswerMode, setQuizAnswerMode] = useState<string>('retry-until-correct');
+  const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
+  const [allAnswers, setAllAnswers] = useState<Array<{ questionId: string; optionIds: string[] }>>([]);
   const [showStage, setShowStage] = useState(false);
   const [stageMode, setStageMode] = useState<"success" | "sad">("success");
   const [stageAction, setStageAction] = useState<string>("walk");
+  const [isCompletingQuiz, setIsCompletingQuiz] = useState(false);
 
-  const currentQuestion = QUESTIONS[currentIndex];
-
+  // Fetch quiz questions from API
   useEffect(() => {
-    if (!student.selectedCharacter) {
-      // If the student didn’t select a character, redirect them back
+    const fetchQuiz = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/teacher/quiz/${resolvedParams.quizId}/questions`);
+        const data = await response.json();
+        
+        if (response.ok && data.quiz) {
+          setQuestions(data.quiz.questions || []);
+          const answerMode = data.quiz.answerMode || 'retry-until-correct';
+          setQuizAnswerMode(answerMode);
+          // Update quiz settings with the answerMode from the quiz
+          setQuizSettings({ ...quizSettings, answerMode: answerMode as 'single-pass' | 'retry-until-correct' });
+        } else {
+          toast({
+            title: "Failed to load quiz",
+            description: data.error || "Please try again later.",
+            status: "error",
+            duration: 5000,
+            isClosable: true,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching quiz:', error);
+        toast({
+          title: "Error loading quiz",
+          description: "Please try again later.",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (resolvedParams.quizId) {
+      fetchQuiz();
+    }
+  }, [resolvedParams.quizId, toast]);
+
+  // Check if student has selected a character (must be before any conditional returns)
+  useEffect(() => {
+    if (!loading && questions.length > 0 && !student.selectedCharacter) {
+      // If the student didn't select a character, redirect them back
       router.push(`/quiz/${resolvedParams.quizId}/select-character`);
     }
-  }, [student, router, resolvedParams.quizId]);
+  }, [student.selectedCharacter, loading, questions.length, router, resolvedParams.quizId]);
+
+  if (loading) {
+    return (
+      <Box p={8} textAlign="center">
+        <Heading size="lg" mb={6}>
+          Loading quiz...
+        </Heading>
+      </Box>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <Box p={8} textAlign="center">
+        <Heading size="lg" mb={6}>
+          No questions found
+        </Heading>
+        <Text color="gray.600">
+          This quiz doesn't have any questions yet.
+        </Text>
+      </Box>
+    );
+  }
+
+  const currentQuestion = questions[currentIndex];
+  
+  // Get correct answers from the options
+  const correctAnswers = currentQuestion.options
+    .filter(opt => opt.isCorrect)
+    .map(opt => opt.text);
+  
+  // Get options as strings for the UI
+  const optionTexts = currentQuestion.options.map(opt => opt.text);
 
   // helper: pick random action among main actions
   const pickRandomAction = () => {
@@ -83,8 +141,24 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
 
   function handleSubmit() {
     const isCorrect =
-      currentQuestion.correctAnswers.length === answers.length &&
-      currentQuestion.correctAnswers.every((ans) => answers.includes(ans));
+      correctAnswers.length === answers.length &&
+      correctAnswers.every((ans) => answers.includes(ans));
+
+    // Map text answers to option IDs
+    const selectedOptionIds: string[] = [];
+    answers.forEach(answerText => {
+      const option = currentQuestion.options.find(opt => opt.text === answerText);
+      if (option) {
+        selectedOptionIds.push(option.id);
+      }
+    });
+
+    // Save answer for this question
+    setAllAnswers(prev => {
+      // Remove existing answer for this question if any (for retries)
+      const filtered = prev.filter(a => a.questionId !== currentQuestion.id);
+      return [...filtered, { questionId: currentQuestion.id, optionIds: selectedOptionIds }];
+    });
 
     // Save attempt progress score increment on correct
     if (isCorrect) {
@@ -93,8 +167,8 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
     }
 
     
-    // Decide based on quizSettings
-    const mode = quizSettings?.answerMode ?? "single-pass";
+    // Decide based on quiz answerMode from database
+    const mode = quizAnswerMode || (quizSettings?.answerMode ?? "retry-until-correct");
 
     if (mode === "single-pass") {
       // Always show stage in success mode (but visual can differ)
@@ -123,16 +197,54 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
   const handleStageComplete = () => {
     setShowStage(false);
 
-    if (stageMode === "sad" && (quizSettings?.answerMode ?? "single-pass") === "retry-until-correct") {
+    if (stageMode === "sad" && (quizAnswerMode || (quizSettings?.answerMode ?? "retry-until-correct")) === "retry-until-correct") {
       // stay on same question (student should try again)
       toast({ title: "Try again!", status: "info", duration: 1200, isClosable: true });
       return;
     }
 
     // proceed to next question or final stage immediately
-    if (currentIndex < QUESTIONS.length - 1) {
+    if (currentIndex < questions.length - 1) {
       setCurrentIndex((prev) => prev + 1);
     } else {
+      // Mark as completing to prevent showing the last question again
+      setIsCompletingQuiz(true);
+      // Save attempt before navigating to final stage
+      saveAttempt();
+    }
+  }
+
+  const saveAttempt = async () => {
+    try {
+      // Make sure we have answers for all questions (some might be empty if student skipped)
+      const completeAnswers = questions.map(q => {
+        const answer = allAnswers.find(a => a.questionId === q.id);
+        return {
+          questionId: q.id,
+          optionIds: answer?.optionIds || []
+        };
+      });
+
+      const response = await fetch('/api/student/attempts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quizId: resolvedParams.quizId,
+          studentFullName: student.fullName,
+          nickname: student.nickname,
+          answers: completeAnswers
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to save attempt:', error);
+      }
+    } catch (error) {
+      console.error('Error saving attempt:', error);
+    } finally {
       // go to final stage page (no flash)
       router.push(`/quiz/${resolvedParams.quizId}/stage?final=true`);
     }
@@ -147,6 +259,17 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
         scene={quizSettings?.scene}
         onComplete={handleStageComplete}
       />
+    );
+  }
+
+  // If quiz is being completed, show loading state instead of the last question
+  if (isCompletingQuiz) {
+    return (
+      <Box p={8} textAlign="center">
+        <Heading size="lg" mb={6}>
+          Saving your results...
+        </Heading>
+      </Box>
     );
   }
 
@@ -165,14 +288,14 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
         mx="auto"
       >
         <Text fontSize="xl" mb={4} fontWeight="semibold">
-          {currentQuestion.question}
+          {currentQuestion.text}
         </Text>
 
         {currentQuestion.type === "SINGLE_CHOICE" ? (
-          <RadioGroup value={answers[0]} onChange={(val: string) => setAnswers([val])}>
+          <RadioGroup value={answers[0] || ""} onChange={(val: string) => setAnswers([val])}>
             <VStack align="start" gap={3}>
-              {currentQuestion.options.map((opt) => (
-                <Radio key={opt} value={opt} colorScheme="blue">
+              {optionTexts.map((opt, idx) => (
+                <Radio key={idx} value={opt} colorScheme="blue">
                   {opt}
                 </Radio>
               ))}
@@ -181,8 +304,8 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
         ) : (
           <CheckboxGroup value={answers} onChange={(vals) => setAnswers(vals as string[])}>
             <Stack direction="column" gap={3}>
-              {currentQuestion.options.map((opt) => (
-                <Checkbox key={opt} value={opt} colorScheme="blue">
+              {optionTexts.map((opt, idx) => (
+                <Checkbox key={idx} value={opt} colorScheme="blue">
                   {opt}
                 </Checkbox>
               ))}
