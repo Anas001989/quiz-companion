@@ -16,11 +16,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ quizId: string }> }
 ) {
+  const startTime = Date.now()
   try {
     const { quizId } = await params
     const body: GenerateQuestionsRequest = await request.json()
     const { description, singleChoiceCount, multiChoiceCount, answerCount } = body
 
+    console.log(`[API] POST /api/teacher/quiz/${quizId}/generate-questions - Starting...`)
     console.log('AI Generation Request:', { quizId, singleChoiceCount, multiChoiceCount, answerCount, descriptionLength: description?.length })
 
     if (!quizId) {
@@ -201,9 +203,13 @@ Return ONLY the JSON object, no other text or explanation.`
       return NextResponse.json({ error: 'No valid questions generated' }, { status: 500 })
     }
 
+    const duration = Date.now() - startTime
+    console.log(`[API] POST /api/teacher/quiz/${quizId}/generate-questions - Completed in ${duration}ms (Generated ${validatedQuestions.length} questions)`)
+
     return NextResponse.json({ questions: validatedQuestions })
   } catch (error: any) {
-    console.error('Unexpected error generating questions:', error)
+    const duration = Date.now() - startTime
+    console.error(`[API] POST /api/teacher/quiz/${await params.then(p => p.quizId)}/generate-questions - ERROR after ${duration}ms:`, error)
     console.error('Error stack:', error?.stack)
     return NextResponse.json({
       error: 'Failed to generate questions',

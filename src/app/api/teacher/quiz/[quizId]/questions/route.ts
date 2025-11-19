@@ -5,6 +5,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ quizId: string }> }
 ) {
+  const startTime = Date.now()
   try {
     const { quizId } = await params
 
@@ -56,9 +57,13 @@ export async function GET(
       questions: quiz.questions
     }
 
+    const duration = Date.now() - startTime
+    console.log(`[API] GET /api/teacher/quiz/${quizId}/questions - ${duration}ms`)
+    
     return NextResponse.json({ quiz: transformedQuiz })
   } catch (error) {
-    console.error('Error fetching quiz questions:', error)
+    const duration = Date.now() - startTime
+    console.error(`[API] GET /api/teacher/quiz/${await params.then(p => p.quizId)}/questions - ERROR after ${duration}ms:`, error)
     return NextResponse.json({ 
       error: 'Failed to fetch quiz questions',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -70,14 +75,97 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ quizId: string }> }
 ) {
+  const startTime = Date.now()
   try {
     const { quizId } = await params
     const body = await request.json()
-    const { text, type, options } = body
+    
+    // Check if this is a batch request (array of questions) or single question
+    const isBatch = Array.isArray(body.questions) || (body.questions && Array.isArray(body.questions))
+    const questions = isBatch ? (body.questions || body) : null
+    const singleQuestion = isBatch ? null : body
 
     if (!quizId) {
       return NextResponse.json({ error: 'Quiz ID is required' }, { status: 400 })
     }
+
+    // Handle batch creation
+    if (isBatch && questions && questions.length > 0) {
+      // Validate all questions
+      for (const q of questions) {
+        if (!q.text || !q.type) {
+          return NextResponse.json({ 
+            error: 'All questions must have text and type', 
+            details: `Invalid question: ${JSON.stringify(q).substring(0, 100)}`
+          }, { status: 400 })
+        }
+      }
+
+      // Optimized batch creation: Create questions in parallel, then batch insert options
+      // This reduces from 50+ queries to ~12 queries (10 parallel question creates + 1 createMany + 1 fetch)
+      const createdQuestions = await prisma.$transaction(async (tx) => {
+        // Step 1: Create all questions in parallel (they don't depend on each other)
+        // This is still 10 queries, but they run in parallel so total time ≈ 1 query time
+        const questionData = questions.map((q: any) => ({
+          text: q.text,
+          type: q.type,
+          quizId,
+        }))
+
+        const createdQuestions = await Promise.all(
+          questionData.map(data => tx.question.create({ data }))
+        )
+
+        // Step 2: Prepare all options data with question IDs
+        const allOptions = questions.flatMap((q: any, index: number) => 
+          (q.options || []).map((opt: any) => ({
+            text: opt.text,
+            isCorrect: opt.isCorrect,
+            questionId: createdQuestions[index].id,
+          }))
+        )
+
+        // Step 3: Batch insert ALL options in a single query using createMany
+        // This is the key optimization - 1 query instead of 40 queries
+        if (allOptions.length > 0) {
+          // Split into chunks if needed (some DBs have limits)
+          const chunkSize = 100
+          for (let i = 0; i < allOptions.length; i += chunkSize) {
+            const chunk = allOptions.slice(i, i + chunkSize)
+            await tx.option.createMany({
+              data: chunk,
+              skipDuplicates: false,
+            })
+          }
+        }
+
+        // Step 4: Fetch all created questions with their options (single query)
+        return await tx.question.findMany({
+          where: {
+            id: { in: createdQuestions.map(q => q.id) }
+          },
+          include: {
+            options: true
+          },
+          orderBy: {
+            id: 'asc'
+          }
+        })
+      }, {
+        timeout: 30000, // 30 second timeout for large batches
+      })
+
+      const duration = Date.now() - startTime
+      console.log(`[API] POST /api/teacher/quiz/${quizId}/questions (BATCH: ${questions.length} questions) - ${duration}ms`)
+      
+      return NextResponse.json({ 
+        questions: createdQuestions,
+        count: createdQuestions.length
+      })
+    }
+
+    // Handle single question creation (backward compatibility)
+    const { text, type, options } = singleQuestion || body
 
     if (!text || !type) {
       return NextResponse.json({ error: 'Question text and type are required' }, { status: 400 })
@@ -98,11 +186,15 @@ export async function POST(
       }
     })
 
+    const duration = Date.now() - startTime
+    console.log(`[API] POST /api/teacher/quiz/${quizId}/questions (SINGLE) - ${duration}ms`)
+
     return NextResponse.json({ question })
   } catch (error) {
-    console.error('Error creating question:', error)
+    const duration = Date.now() - startTime
+    console.error(`[API] POST /api/teacher/quiz/${await params.then(p => p.quizId)}/questions - ERROR after ${duration}ms:`, error)
     return NextResponse.json({ 
-      error: 'Failed to create question',
+      error: 'Failed to create question(s)',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }

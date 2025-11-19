@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Box,
   Container,
@@ -42,19 +42,22 @@ export default function TeacherDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { teacher, logout } = useTeacher();
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
     // Get teacher ID from URL params
     const teacherIdFromUrl = searchParams.get('teacherId');
     
-    if (teacherIdFromUrl) {
+    if (teacherIdFromUrl && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       setTeacherId(teacherIdFromUrl);
       fetchQuizzes(teacherIdFromUrl);
-    } else {
+    } else if (!teacherIdFromUrl) {
       // No teacher ID in URL, redirect to auth
       router.push('/teacher/auth');
     }
-  }, [searchParams, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('teacherId')]); // Only depend on the actual value, not the object
 
   const fetchQuizzes = async (teacherId: string) => {
     try {

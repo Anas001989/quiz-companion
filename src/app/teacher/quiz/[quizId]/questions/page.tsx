@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Box,
   Container,
@@ -64,12 +64,19 @@ export default function QuizQuestionsPage() {
   const searchParams = useSearchParams();
   const quizId = params.quizId as string;
   const teacherId = searchParams.get('teacherId');
+  const hasFetchedRef = useRef(false);
+  const fetchingRef = useRef(false);
 
   useEffect(() => {
-    if (quizId) {
-      fetchQuiz();
+    if (quizId && !hasFetchedRef.current && !fetchingRef.current) {
+      hasFetchedRef.current = true;
+      fetchingRef.current = true;
+      fetchQuiz().finally(() => {
+        fetchingRef.current = false;
+      });
     }
-  }, [quizId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizId]); // Only depend on quizId to prevent duplicate calls
 
   const fetchQuiz = async () => {
     try {
@@ -392,18 +399,24 @@ export default function QuizQuestionsPage() {
           quizId={quizId}
           onQuestionsGenerated={async (questions) => {
             try {
-              // Save all generated questions
-              for (const question of questions) {
-                await fetch(`/api/teacher/quiz/${quizId}/questions`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(question)
-                });
+              // Save all generated questions in a single batch API call
+              const response = await fetch(`/api/teacher/quiz/${quizId}/questions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ questions })
+              });
+              
+              const data = await response.json();
+              
+              if (!response.ok) {
+                throw new Error(data.error || 'Failed to save questions');
               }
+              
               setMessage(`Successfully added ${questions.length} questions!`);
               fetchQuiz();
-            } catch (error) {
-              setMessage('Failed to save generated questions');
+            } catch (error: any) {
+              console.error('Error saving generated questions:', error);
+              setMessage(`Failed to save generated questions: ${error?.message || 'Unknown error'}`);
             }
           }}
         />

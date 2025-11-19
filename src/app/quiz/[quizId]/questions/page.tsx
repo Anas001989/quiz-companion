@@ -51,14 +51,21 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
   const [isCompletingQuiz, setIsCompletingQuiz] = useState(false);
 
   // Fetch quiz questions from API
+  const hasFetchedRef = React.useRef(false);
+  const fetchingRef = React.useRef(false);
+  
   useEffect(() => {
     const fetchQuiz = async () => {
+      if (fetchingRef.current || hasFetchedRef.current) return;
+      
       try {
+        fetchingRef.current = true;
         setLoading(true);
         const response = await fetch(`/api/teacher/quiz/${resolvedParams.quizId}/questions`);
         const data = await response.json();
         
         if (response.ok && data.quiz) {
+          hasFetchedRef.current = true;
           setQuestions(data.quiz.questions || []);
           const answerMode = data.quiz.answerMode || 'retry-until-correct';
           setQuizAnswerMode(answerMode);
@@ -84,13 +91,15 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
         });
       } finally {
         setLoading(false);
+        fetchingRef.current = false;
       }
     };
 
     if (resolvedParams.quizId) {
       fetchQuiz();
     }
-  }, [resolvedParams.quizId, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedParams.quizId]); // Removed 'toast' from dependencies to prevent duplicate calls
 
   // Check if student has selected a character (must be before any conditional returns)
   useEffect(() => {

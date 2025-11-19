@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma/prisma'
 
 export async function GET(request: NextRequest) {
+  const startTime = Date.now()
   try {
     const { searchParams } = new URL(request.url)
     const teacherId = searchParams.get('teacherId')
@@ -39,14 +40,19 @@ export async function GET(request: NextRequest) {
       attemptCount: quiz._count.attempts
     }))
 
+    const duration = Date.now() - startTime
+    console.log(`[API] GET /api/teacher/quizzes?teacherId=${teacherId} - ${duration}ms (${quizzes.length} quizzes)`)
+
     return NextResponse.json({ quizzes: quizzesWithStats })
   } catch (error) {
-    console.error('Error fetching teacher quizzes:', error)
+    const duration = Date.now() - startTime
+    console.error(`[API] GET /api/teacher/quizzes - ERROR after ${duration}ms:`, error)
     return NextResponse.json({ error: 'Failed to fetch quizzes' }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
   try {
     const body = await request.json()
     const { title, teacherId } = body
@@ -71,9 +77,13 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    const duration = Date.now() - startTime
+    console.log(`[API] POST /api/teacher/quizzes - ${duration}ms`)
+
     return NextResponse.json({ quiz })
   } catch (error) {
-    console.error('Error creating quiz:', error)
+    const duration = Date.now() - startTime
+    console.error(`[API] POST /api/teacher/quizzes - ERROR after ${duration}ms:`, error)
     return NextResponse.json({ 
       error: 'Failed to create quiz', 
       details: error instanceof Error ? error.message : 'Unknown error'
