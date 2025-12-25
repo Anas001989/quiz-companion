@@ -1,30 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma/prisma'
+import bcrypt from 'bcrypt'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email } = body
+    const { emailOrUsername, password } = body
 
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    if (!emailOrUsername || !password) {
+      return NextResponse.json({ error: 'Email/username and password are required' }, { status: 400 })
     }
 
-    // Find teacher by email
+    // Find teacher by email or username
     const teacher = await prisma.teacher.findFirst({
       where: {
-        email: email
+        OR: [
+          { email: emailOrUsername },
+          { username: emailOrUsername }
+        ]
       }
     })
 
     if (!teacher) {
-      return NextResponse.json({ error: 'Teacher not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Invalid email/username or password' }, { status: 401 })
     }
 
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, teacher.password)
+
+    if (!isPasswordValid) {
+      return NextResponse.json({ error: 'Invalid email/username or password' }, { status: 401 })
+    }
+
+    // Don't return the password in the response
     return NextResponse.json({ 
       teacher: {
         id: teacher.id,
-        name: teacher.name,
+        firstName: teacher.firstName,
+        lastName: teacher.lastName,
+        username: teacher.username,
         email: teacher.email
       }
     })

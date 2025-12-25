@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 type Teacher = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
+  username: string;
   email: string;
 };
 
@@ -30,12 +32,24 @@ export function TeacherProvider({ children }: { children: ReactNode }) {
       // Store teacher ID in localStorage for persistence
       localStorage.setItem('teacherId', teacherId);
       // We could fetch teacher details here, but for now we'll just store the ID
-      setTeacherState({ id: teacherId, name: 'Teacher', email: '' });
+      setTeacherState({ 
+        id: teacherId, 
+        firstName: 'Teacher', 
+        lastName: '', 
+        username: '', 
+        email: '' 
+      });
     } else {
       // Check localStorage for existing teacher
       const storedTeacherId = localStorage.getItem('teacherId');
       if (storedTeacherId) {
-        setTeacherState({ id: storedTeacherId, name: 'Teacher', email: '' });
+        setTeacherState({ 
+          id: storedTeacherId, 
+          firstName: 'Teacher', 
+          lastName: '', 
+          username: '', 
+          email: '' 
+        });
       }
     }
   }, [searchParams]);

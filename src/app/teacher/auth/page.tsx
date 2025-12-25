@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTeacher } from "@/context/TeacherContext";
 import {
@@ -21,12 +21,21 @@ export default function TeacherAuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
+    username: "",
     email: "",
+    emailOrUsername: "",
     password: "",
     confirmPassword: ""
   });
+
+  // Prevent hydration mismatch from browser extensions
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -39,36 +48,41 @@ export default function TeacherAuthPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.email.trim()) {
-      setMessage("Please enter your email address");
+    if (!formData.emailOrUsername.trim()) {
+      setMessage("Please enter your email or username");
+      return;
+    }
+
+    if (!formData.password.trim()) {
+      setMessage("Please enter your password");
       return;
     }
 
     try {
       setLoading(true);
       
-      // Find teacher by email
+      // Find teacher by email or username and verify password
       const response = await fetch('/api/teacher/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: formData.email,
+          emailOrUsername: formData.emailOrUsername,
+          password: formData.password,
         }),
       });
       
       const data = await response.json();
       
       if (response.ok) {
-        // Teacher exists, set in context and redirect to dashboard
+        // Teacher authenticated, set in context and redirect to dashboard
         setTeacher(data.teacher);
         setMessage("Login successful! Redirecting...");
         setTimeout(() => router.push(`/teacher/dashboard?teacherId=${data.teacher.id}`), 1000);
       } else {
-        // Teacher doesn't exist, show registration option
-        setMessage("Account not found. Please register for a new account.");
-        setIsLogin(false);
+        // Invalid credentials
+        setMessage(data.error || "Invalid email/username or password. Please try again.");
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -81,8 +95,35 @@ export default function TeacherAuthPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name.trim() || !formData.email.trim()) {
-      setMessage("Please enter your name and email");
+    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+      setMessage("Please enter your first and last name");
+      return;
+    }
+
+    if (!formData.username.trim()) {
+      setMessage("Please enter a username");
+      return;
+    }
+
+    // Validate username format
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(formData.username)) {
+      setMessage("Username can only contain letters, numbers, and underscores");
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      setMessage("Please enter your email");
+      return;
+    }
+
+    if (!formData.password.trim()) {
+      setMessage("Please enter a password");
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setMessage("Password must be at least 6 characters long");
       return;
     }
 
@@ -100,8 +141,11 @@ export default function TeacherAuthPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: formData.name,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          username: formData.username,
           email: formData.email,
+          password: formData.password,
         }),
       });
 
@@ -122,6 +166,26 @@ export default function TeacherAuthPage() {
       setLoading(false);
     }
   };
+
+  // Prevent hydration mismatch - only render form after mount
+  if (!mounted) {
+    return (
+      <Box minH="100vh" bg="gray.50" display="flex" alignItems="center" justifyContent="center">
+        <Container maxW="md">
+          <Box bg="white" p={8} borderRadius="xl" shadow="lg">
+            <VStack gap={8}>
+              <VStack gap={2} textAlign="center">
+                <Heading size="lg" color="blue.700">
+                  Teacher Portal
+                </Heading>
+                <Text color="gray.600">Loading...</Text>
+              </VStack>
+            </VStack>
+          </Box>
+        </Container>
+      </Box>
+    );
+  }
 
   return (
     <Box minH="100vh" bg="gray.50" display="flex" alignItems="center" justifyContent="center">
@@ -153,13 +217,25 @@ export default function TeacherAuthPage() {
                 <form onSubmit={handleLogin}>
                   <VStack gap={4}>
                     <VStack gap={2} align="start" w="full">
-                      <Text fontSize="sm" fontWeight="medium">Email</Text>
+                      <Text fontSize="sm" fontWeight="medium">Email or Username</Text>
                       <Input
-                        type="email"
-                        name="email"
-                        value={formData.email}
+                        type="text"
+                        name="emailOrUsername"
+                        value={formData.emailOrUsername}
                         onChange={handleInputChange}
-                        placeholder="Enter your email"
+                        placeholder="Enter your email or username"
+                        required
+                      />
+                    </VStack>
+
+                    <VStack gap={2} align="start" w="full">
+                      <Text fontSize="sm" fontWeight="medium">Password</Text>
+                      <Input
+                        type="password"
+                        name="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        placeholder="Enter your password"
                         required
                       />
                     </VStack>
@@ -179,16 +255,45 @@ export default function TeacherAuthPage() {
               ) : (
                 <form onSubmit={handleRegister}>
                   <VStack gap={4}>
+                    <HStack gap={4} w="full">
+                      <VStack gap={2} align="start" w="full">
+                        <Text fontSize="sm" fontWeight="medium">First Name</Text>
+                        <Input
+                          type="text"
+                          name="firstName"
+                          value={formData.firstName}
+                          onChange={handleInputChange}
+                          placeholder="First name"
+                          required
+                        />
+                      </VStack>
+
+                      <VStack gap={2} align="start" w="full">
+                        <Text fontSize="sm" fontWeight="medium">Last Name</Text>
+                        <Input
+                          type="text"
+                          name="lastName"
+                          value={formData.lastName}
+                          onChange={handleInputChange}
+                          placeholder="Last name"
+                          required
+                        />
+                      </VStack>
+                    </HStack>
+
                     <VStack gap={2} align="start" w="full">
-                      <Text fontSize="sm" fontWeight="medium">Full Name</Text>
+                      <Text fontSize="sm" fontWeight="medium">Username</Text>
                       <Input
                         type="text"
-                        name="name"
-                        value={formData.name}
+                        name="username"
+                        value={formData.username}
                         onChange={handleInputChange}
-                        placeholder="Enter your full name"
+                        placeholder="Choose a username"
                         required
                       />
+                      <Text fontSize="xs" color="gray.500">
+                        Letters, numbers, and underscores only
+                      </Text>
                     </VStack>
 
                     <VStack gap={2} align="start" w="full">
@@ -253,7 +358,15 @@ export default function TeacherAuthPage() {
                   variant="ghost"
                   onClick={() => {
                     setIsLogin(!isLogin);
-                    setFormData({ name: "", email: "", password: "", confirmPassword: "" });
+                    setFormData({ 
+                      firstName: "", 
+                      lastName: "", 
+                      username: "", 
+                      email: "", 
+                      emailOrUsername: "",
+                      password: "", 
+                      confirmPassword: "" 
+                    });
                     setMessage("");
                   }}
                 >
@@ -262,13 +375,6 @@ export default function TeacherAuthPage() {
               </HStack>
             </VStack>
 
-            {/* Demo info */}
-            <Box p={4} bg="blue.50" borderRadius="md" w="full">
-              <Text fontSize="sm" color="blue.700" textAlign="center">
-                <strong>Demo Mode:</strong> For testing, you can use any email to sign in. 
-                If the account doesn't exist, you'll be prompted to register.
-              </Text>
-            </Box>
           </VStack>
         </Box>
       </Container>

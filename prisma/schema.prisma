@@ -19,7 +19,10 @@ datasource db {
 model Teacher {
   id        String   @id @default(cuid())
   email     String   @unique
-  name      String?
+  username  String   @unique
+  firstName String
+  lastName  String
+  password  String
   quizzes   Quiz[]
   createdAt DateTime @default(now())
 }
