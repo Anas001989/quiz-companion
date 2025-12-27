@@ -43,3 +43,22 @@
     border-color: #3182ce !important;
     background: #3182ce !important;
   }
+
+/* Fix Next.js portal positioning */
+[nextjs-portal] {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 9999 !important;
+}
+
+/* Override any inline styles that might set negative values */
+[nextjs-portal][style*="left"] {
+  left: 0 !important;
+}
+
+[nextjs-portal][style*="top"] {
+  top: 0 !important;
+}
