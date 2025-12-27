@@ -50,24 +50,26 @@ model Quiz {
 }
 
 model Question {
-  id         String    @id @default(cuid())
-  text       String
-  type       QuestionType
-  quiz       Quiz      @relation(fields: [quizId], references: [id])
-  quizId     String
-  options    Option[]
-  answers    Answer[]  // 🔥 added opposite relation
+  id              String    @id @default(cuid())
+  text            String
+  type            QuestionType
+  questionImageUrl String?
+  quiz            Quiz      @relation(fields: [quizId], references: [id])
+  quizId          String
+  options         Option[]
+  answers         Answer[]  // 🔥 added opposite relation
 
   @@index([quizId])
 }
 
 model Option {
-  id         String    @id @default(cuid())
-  text       String
-  isCorrect  Boolean   @default(false)
-  question   Question  @relation(fields: [questionId], references: [id])
-  questionId String
-  answers    Answer[]  // 🔥 added opposite relation
+  id             String    @id @default(cuid())
+  text           String
+  isCorrect      Boolean   @default(false)
+  answerImageUrl String?
+  question       Question  @relation(fields: [questionId], references: [id])
+  questionId     String
+  answers        Answer[]  // 🔥 added opposite relation
 
   @@index([questionId])
 }

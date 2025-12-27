@@ -14,39 +14,64 @@ export async function GET(
     }
 
     // Optimized query - only select needed fields
-    const quiz = await prisma.quiz.findUnique({
-      where: {
-        id: quizId
-      },
-      select: {
-        id: true,
-        title: true,
-        answerMode: true,
-        questions: {
-          select: {
-            id: true,
-            text: true,
-            type: true,
-            options: {
-              select: {
-                id: true,
-                text: true,
-                isCorrect: true
-              },
-              orderBy: {
-                id: 'asc'
+    // Note: If you see Prisma errors about questionImageUrl/answerImageUrl, 
+    // run: npx prisma generate (after stopping dev server)
+    let quiz
+    try {
+      quiz = await prisma.quiz.findUnique({
+        where: {
+          id: quizId
+        },
+        select: {
+          id: true,
+          title: true,
+          answerMode: true,
+          questions: {
+            select: {
+              id: true,
+              text: true,
+              type: true,
+              questionImageUrl: true,
+              options: {
+                select: {
+                  id: true,
+                  text: true,
+                  isCorrect: true,
+                  answerImageUrl: true
+                },
+                orderBy: {
+                  id: 'asc'
+                }
               }
+            },
+            orderBy: {
+              id: 'asc'
             }
-          },
-          orderBy: {
-            id: 'asc'
           }
         }
+      })
+    } catch (prismaError: any) {
+      // If Prisma client is out of sync, provide helpful error
+      if (prismaError.message?.includes('questionImageUrl') || 
+          prismaError.message?.includes('answerImageUrl') ||
+          prismaError.message?.includes('Unknown column')) {
+        console.error('[API] Prisma client out of sync. Run: npx prisma generate')
+        return NextResponse.json({ 
+          error: 'Database schema mismatch',
+          details: 'Prisma client needs to be regenerated. Stop dev server and run: npx prisma generate',
+          hint: 'The database has new columns but Prisma client code is outdated'
+        }, { status: 500 })
       }
-    })
+      throw prismaError
+    }
 
     if (!quiz) {
-      return NextResponse.json({ error: 'Quiz not found' }, { status: 404 })
+      console.error(`[API] Quiz not found: ${quizId}`)
+      return NextResponse.json({ 
+        error: 'Quiz not found',
+        quizId,
+        message: `No quiz found with ID: ${quizId}. Please check the quiz ID and try again.`
+      }, { status: 404 })
     }
 
     // Quiz data is already in the right format (no transformation needed)
@@ -63,10 +88,23 @@ export async function GET(
     return NextResponse.json({ quiz: transformedQuiz })
   } catch (error) {
     const duration = Date.now() - startTime
-    console.error(`[API] GET /api/teacher/quiz/${await params.then(p => p.quizId)}/questions - ERROR after ${duration}ms:`, error)
+    const quizIdForLog = await params.then(p => p.quizId)
+    console.error(`[API] GET /api/teacher/quiz/${quizIdForLog}/questions - ERROR after ${duration}ms:`, error)
+    
+    // Check if it's a Prisma schema error (missing columns)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const isSchemaError = errorMessage.includes('Unknown column') || 
+                         errorMessage.includes('column') && errorMessage.includes('does not exist') ||
+                         errorMessage.includes('questionImageUrl') ||
+                         errorMessage.includes('answerImageUrl')
+    
     return NextResponse.json({ 
       error: 'Failed to fetch quiz questions',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: errorMessage,
+      hint: isSchemaError 
+        ? 'Database schema may be out of sync. Try running: npx prisma generate && restart server'
+        : 'Check server logs for more details',
+      quizId: quizIdForLog
     }, { status: 500 })
   }
 }
@@ -109,6 +147,7 @@ export async function POST(
         const questionData = questions.map((q: any) => ({
           text: q.text,
           type: q.type,
+          questionImageUrl: q.questionImageUrl || null,
           quizId,
         }))
 
@@ -121,6 +160,7 @@ export async function POST(
           (q.options || []).map((opt: any) => ({
             text: opt.text,
             isCorrect: opt.isCorrect,
+            answerImageUrl: opt.answerImageUrl || null,
             questionId: createdQuestions[index].id,
           }))
         )
@@ -176,9 +216,14 @@ export async function POST(
       data: {
         text,
         type,
+        questionImageUrl: singleQuestion?.questionImageUrl || body.questionImageUrl || null,
         quizId,
         options: {
-          create: options || []
+          create: (options || []).map((opt: any) => ({
+            text: opt.text,
+            isCorrect: opt.isCorrect,
+            answerImageUrl: opt.answerImageUrl || null
+          }))
         }
       },
       include: {

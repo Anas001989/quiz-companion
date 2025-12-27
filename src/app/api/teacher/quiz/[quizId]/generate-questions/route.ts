@@ -5,11 +5,27 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
-interface GenerateQuestionsRequest {
-  description: string
-  singleChoiceCount: number
-  multiChoiceCount: number
+type GenerationMode = 'teacher-controlled' | 'ai-controlled'
+type ImageMode = 'none' | 'question-only' | 'answer-only' | 'both'
+
+interface QuestionSet {
+  count: number
+  type: 'SINGLE_CHOICE' | 'MULTI_CHOICE'
   answerCount: number
+  imageMode: ImageMode
+}
+
+interface GenerateQuestionsRequest {
+  mode?: GenerationMode
+  // Teacher-controlled mode
+  questionSets?: QuestionSet[]
+  description?: string
+  // AI-controlled mode
+  totalQuestions?: number
+  // Legacy mode (backward compatibility)
+  singleChoiceCount?: number
+  multiChoiceCount?: number
+  answerCount?: number
 }
 
 export async function POST(
@@ -20,26 +36,46 @@ export async function POST(
   try {
     const { quizId } = await params
     const body: GenerateQuestionsRequest = await request.json()
-    const { description, singleChoiceCount, multiChoiceCount, answerCount } = body
+    const { mode, questionSets, description, totalQuestions, singleChoiceCount, multiChoiceCount, answerCount } = body
 
     console.log(`[API] POST /api/teacher/quiz/${quizId}/generate-questions - Starting...`)
-    console.log('AI Generation Request:', { quizId, singleChoiceCount, multiChoiceCount, answerCount, descriptionLength: description?.length })
+    console.log('AI Generation Request:', { quizId, mode, questionSets, description, totalQuestions, singleChoiceCount, multiChoiceCount, answerCount })
 
     if (!quizId) {
       return NextResponse.json({ error: 'Quiz ID is required' }, { status: 400 })
     }
 
-    if (!description || singleChoiceCount === undefined || multiChoiceCount === undefined || answerCount === undefined) {
-      return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
-    }
+    // Determine generation mode (default to legacy mode for backward compatibility)
+    const generationMode: GenerationMode = mode || (questionSets ? 'teacher-controlled' : (totalQuestions ? 'ai-controlled' : 'legacy'))
 
-    if (singleChoiceCount < 0 || multiChoiceCount < 0 || answerCount < 2) {
-      return NextResponse.json({ error: 'Invalid question or answer counts' }, { status: 400 })
-    }
-
-    const totalQuestions = singleChoiceCount + multiChoiceCount
-    if (totalQuestions === 0) {
-      return NextResponse.json({ error: 'At least one question type must be specified' }, { status: 400 })
+    // Validate based on mode
+    if (generationMode === 'teacher-controlled') {
+      if (!questionSets || questionSets.length === 0) {
+        return NextResponse.json({ error: 'Question sets are required for teacher-controlled mode' }, { status: 400 })
+      }
+      const total = questionSets.reduce((sum, set) => sum + set.count, 0)
+      if (total === 0) {
+        return NextResponse.json({ error: 'At least one question must be specified' }, { status: 400 })
+      }
+    } else if (generationMode === 'ai-controlled') {
+      if (!description || !description.trim()) {
+        return NextResponse.json({ error: 'Description is required for AI-controlled mode' }, { status: 400 })
+      }
+      if (!totalQuestions || totalQuestions < 1) {
+        return NextResponse.json({ error: 'Total questions must be at least 1' }, { status: 400 })
+      }
+    } else {
+      // Legacy mode
+      if (!description || singleChoiceCount === undefined || multiChoiceCount === undefined || answerCount === undefined) {
+        return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
+      }
+      if (singleChoiceCount < 0 || multiChoiceCount < 0 || answerCount < 2) {
+        return NextResponse.json({ error: 'Invalid question or answer counts' }, { status: 400 })
+      }
+      const total = singleChoiceCount + multiChoiceCount
+      if (total === 0) {
+        return NextResponse.json({ error: 'At least one question type must be specified' }, { status: 400 })
+      }
     }
 
     if (!process.env.OPENAI_API_KEY) {
@@ -47,8 +83,94 @@ export async function POST(
       return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 })
     }
 
-    // Build the prompt for OpenAI
-    const prompt = `Generate ${totalQuestions} quiz questions based on the following description: "${description}"
+    // Build the prompt for OpenAI based on mode
+    let prompt = ''
+    
+    if (generationMode === 'teacher-controlled') {
+      const total = questionSets!.reduce((sum, set) => sum + set.count, 0)
+      prompt = `Generate ${total} quiz questions based on the following description: "${description || 'General quiz questions'}"
+
+Question Sets:
+${questionSets!.map((set, idx) => 
+  `Set ${idx + 1}: ${set.count} ${set.type === 'SINGLE_CHOICE' ? 'single choice' : 'multiple choice'} questions with ${set.answerCount} options each. Image mode: ${set.imageMode}.`
+).join('\n')}
+
+Requirements:
+${questionSets!.flatMap((set, setIdx) => {
+  const questions: string[] = []
+  for (let i = 0; i < set.count; i++) {
+    questions.push(`- Question ${setIdx + 1}-${i + 1}: ${set.type === 'SINGLE_CHOICE' ? 'Single choice (exactly ONE correct answer)' : 'Multiple choice (ONE or MORE correct answers)'} with ${set.answerCount} options`)
+    if (set.imageMode === 'question-only' || set.imageMode === 'both') {
+      questions.push(`  * Include a question image (describe what image would be appropriate)`)
+    }
+    if (set.imageMode === 'answer-only' || set.imageMode === 'both') {
+      questions.push(`  * Include answer images (describe what image would be appropriate for each answer)`)
+    }
+  }
+  return questions
+}).join('\n')}
+
+Format your response as a JSON object with a "questions" key containing an array. Each question should have this structure:
+{
+  "questions": [
+    {
+      "text": "Question text here",
+      "type": "SINGLE_CHOICE" or "MULTI_CHOICE",
+      "questionImageUrl": null or "description of image needed",
+      "options": [
+        {"text": "Option 1", "isCorrect": true or false, "answerImageUrl": null or "description of image needed"},
+        ...
+      ]
+    },
+    ...
+  ]
+}
+
+Note: For imageUrl fields, provide a brief description of what image would be appropriate, or null if no image is needed. The actual image generation will happen separately.
+
+Return ONLY the JSON object, no other text or explanation.`
+    } else if (generationMode === 'ai-controlled') {
+      prompt = `Generate ${totalQuestions} quiz questions based on the following description: "${description}"
+
+You must decide:
+1. How many question sets to create
+2. Question types per set (SINGLE_CHOICE or MULTI_CHOICE)
+3. Number of answers per question
+4. Whether images are needed (question images, answer images, or both)
+   - Consider: Math geometry quiz → likely needs images
+   - Consider: Vocabulary quiz → likely no images
+   - Consider: Science quiz → may need diagrams/images
+
+Requirements:
+- Total questions: exactly ${totalQuestions}
+- Each question must have at least 2 options
+- For single choice questions: mark exactly ONE option as correct
+- For multiple choice questions: mark at least ONE option as correct (can be multiple)
+- If images are needed, indicate in questionImageUrl or answerImageUrl fields with a description
+
+Format your response as a JSON object with a "questions" key containing an array. Each question should have this structure:
+{
+  "questions": [
+    {
+      "text": "Question text here",
+      "type": "SINGLE_CHOICE" or "MULTI_CHOICE",
+      "questionImageUrl": null or "description of image needed",
+      "options": [
+        {"text": "Option 1", "isCorrect": true or false, "answerImageUrl": null or "description of image needed"},
+        ...
+      ]
+    },
+    ...
+  ]
+}
+
+Note: For imageUrl fields, provide a brief description of what image would be appropriate, or null if no image is needed. The actual image generation will happen separately.
+
+Return ONLY the JSON object, no other text or explanation.`
+    } else {
+      // Legacy mode
+      const totalQuestions = singleChoiceCount! + multiChoiceCount!
+      prompt = `Generate ${totalQuestions} quiz questions based on the following description: "${description}"
 
 Requirements:
 - Generate exactly ${singleChoiceCount} single choice questions (each has exactly ONE correct answer)
@@ -74,6 +196,7 @@ Format your response as a JSON object with a "questions" key containing an array
 }
 
 Return ONLY the JSON object, no other text or explanation.`
+    }
 
     console.log('Calling OpenAI API...')
     let completion
@@ -181,22 +304,24 @@ Return ONLY the JSON object, no other text or explanation.`
       .map((q: any) => ({
         text: q.text.trim(),
         type: q.type === 'SINGLE_CHOICE' ? 'SINGLE_CHOICE' : 'MULTI_CHOICE',
+        questionImageUrl: q.questionImageUrl || null,
         options: q.options
           .filter((opt: any) => opt.text)
           .map((opt: any) => ({
             text: opt.text.trim(),
-            isCorrect: Boolean(opt.isCorrect)
+            isCorrect: Boolean(opt.isCorrect),
+            answerImageUrl: opt.answerImageUrl || null
           }))
       }))
       .filter((q: any) => {
         // Validate single choice has exactly one correct answer
         if (q.type === 'SINGLE_CHOICE') {
           const correctCount = q.options.filter((opt: any) => opt.isCorrect).length
-          return correctCount === 1 && q.options.length === answerCount
+          return correctCount === 1 && q.options.length >= 2
         }
         // Validate multi choice has at least one correct answer
         const correctCount = q.options.filter((opt: any) => opt.isCorrect).length
-        return correctCount >= 1 && q.options.length === answerCount
+        return correctCount >= 1 && q.options.length >= 2
       })
 
     if (validatedQuestions.length === 0) {

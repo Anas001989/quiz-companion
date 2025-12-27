@@ -8,7 +8,7 @@ export async function PUT(
   try {
     const { quizId, questionId } = await params
     const body = await request.json()
-    const { text, type, options } = body
+    const { text, type, questionImageUrl, options } = body
 
     if (!quizId || !questionId) {
       return NextResponse.json({ error: 'Quiz ID and Question ID are required' }, { status: 400 })
@@ -38,14 +38,31 @@ export async function PUT(
       where: { questionId }
     })
 
+    // Validate answer-image consistency rule
+    if (options && Array.isArray(options)) {
+      const optionsWithImages = options.filter((opt: any) => opt.answerImageUrl)
+      const optionsWithoutImages = options.filter((opt: any) => !opt.answerImageUrl)
+      
+      if (optionsWithImages.length > 0 && optionsWithoutImages.length > 0) {
+        return NextResponse.json({ 
+          error: 'If one answer has an image, all answers must have images' 
+        }, { status: 400 })
+      }
+    }
+
     // Then update the question and create new options
     const updatedQuestion = await prisma.question.update({
       where: { id: questionId },
       data: {
         text,
         type,
+        questionImageUrl: questionImageUrl || null,
         options: {
-          create: options || []
+          create: (options || []).map((opt: any) => ({
+            text: opt.text,
+            isCorrect: opt.isCorrect,
+            answerImageUrl: opt.answerImageUrl || null
+          }))
         }
       },
       include: {

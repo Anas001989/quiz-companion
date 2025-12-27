@@ -26,17 +26,20 @@ import {
 } from '@chakra-ui/form-control';
 import { Checkbox } from '@chakra-ui/checkbox';
 import FunButton from '@/components/ui/FunButton';
+import ImageUploader from './ImageUploader';
 
 interface Option {
   id?: string;
   text: string;
   isCorrect: boolean;
+  answerImageUrl?: string | null;
 }
 
 interface Question {
   id: string;
   text: string;
   type: 'SINGLE_CHOICE' | 'MULTI_CHOICE';
+  questionImageUrl?: string | null;
   options: Option[];
 }
 
@@ -46,7 +49,8 @@ interface QuestionFormProps {
   onSave: (question: {
     text: string;
     type: 'SINGLE_CHOICE' | 'MULTI_CHOICE';
-    options: Array<{ text: string; isCorrect: boolean }>;
+    questionImageUrl?: string | null;
+    options: Array<{ text: string; isCorrect: boolean; answerImageUrl?: string | null }>;
   }) => Promise<void>;
   question?: Question | null;
   quizId: string;
@@ -61,9 +65,11 @@ export default function QuestionForm({
 }: QuestionFormProps) {
   const [questionText, setQuestionText] = useState('');
   const [questionType, setQuestionType] = useState<'SINGLE_CHOICE' | 'MULTI_CHOICE'>('SINGLE_CHOICE');
-  const [options, setOptions] = useState<Array<{ text: string; isCorrect: boolean }>>([
-    { text: '', isCorrect: false },
-    { text: '', isCorrect: false }
+  const [questionImageUrl, setQuestionImageUrl] = useState<string | null>(null);
+  const [questionImageFile, setQuestionImageFile] = useState<File | null>(null); // Store file before upload
+  const [options, setOptions] = useState<Array<{ text: string; isCorrect: boolean; answerImageUrl?: string | null; answerImageFile?: File | null }>>([
+    { text: '', isCorrect: false, answerImageUrl: null, answerImageFile: null },
+    { text: '', isCorrect: false, answerImageUrl: null, answerImageFile: null }
   ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -72,26 +78,30 @@ export default function QuestionForm({
     if (question) {
       setQuestionText(question.text);
       setQuestionType(question.type);
+      setQuestionImageUrl(question.questionImageUrl || null);
       setOptions(
         question.options.map(opt => ({
           text: opt.text,
-          isCorrect: opt.isCorrect
+          isCorrect: opt.isCorrect,
+          answerImageUrl: opt.answerImageUrl || null
         }))
       );
     } else {
       // Reset form for new question
       setQuestionText('');
       setQuestionType('SINGLE_CHOICE');
+      setQuestionImageUrl(null);
+      setQuestionImageFile(null);
       setOptions([
-        { text: '', isCorrect: false },
-        { text: '', isCorrect: false }
+        { text: '', isCorrect: false, answerImageUrl: null, answerImageFile: null },
+        { text: '', isCorrect: false, answerImageUrl: null, answerImageFile: null }
       ]);
     }
     setError('');
   }, [question, isOpen]);
 
   const handleAddOption = () => {
-    setOptions([...options, { text: '', isCorrect: false }]);
+    setOptions([...options, { text: '', isCorrect: false, answerImageUrl: null, answerImageFile: null }]);
   };
 
   const handleRemoveOption = (index: number) => {
@@ -100,7 +110,7 @@ export default function QuestionForm({
     }
   };
 
-  const handleOptionChange = (index: number, field: 'text' | 'isCorrect', value: string | boolean) => {
+  const handleOptionChange = (index: number, field: 'text' | 'isCorrect' | 'answerImageUrl' | 'answerImageFile', value: string | boolean | null | File) => {
     const newOptions = [...options];
     newOptions[index] = {
       ...newOptions[index],
@@ -114,6 +124,20 @@ export default function QuestionForm({
           opt.isCorrect = false;
         }
       });
+    }
+
+    // Enforce answer-image consistency rule: if one answer has an image, all must have images
+    if (field === 'answerImageUrl' || field === 'answerImageFile') {
+      const hasAnyImage = newOptions.some(opt => opt.answerImageUrl || opt.answerImageFile);
+      if (hasAnyImage) {
+        // Ensure all options have images (set to null if they don't have one yet)
+        newOptions.forEach((opt, i) => {
+          if (!opt.answerImageUrl && !opt.answerImageFile && i !== index) {
+            // Keep existing image if present, otherwise leave as null
+            // The validation will catch if they try to save with inconsistent images
+          }
+        });
+      }
     }
 
     setOptions(newOptions);
@@ -134,6 +158,41 @@ export default function QuestionForm({
       });
       setOptions(newOptions);
     }
+  };
+
+  const uploadImage = async (file: File, type: 'question' | 'answer'): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', type);
+
+    const response = await fetch('/api/upload/image', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const errorMsg = data.error || 'Failed to upload image';
+      const details = data.details || '';
+      const hint = data.hint || '';
+      
+      let fullError = errorMsg;
+      if (details && details !== errorMsg) {
+        fullError += `: ${details}`;
+      }
+      if (hint) {
+        fullError += ` (${hint})`;
+      }
+      
+      throw new Error(fullError);
+    }
+
+    if (!data.url) {
+      throw new Error('Upload succeeded but no URL returned');
+    }
+
+    return data.url;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -163,12 +222,44 @@ export default function QuestionForm({
       return;
     }
 
+    // Validate answer-image consistency rule
+    const optionsWithImages = validOptions.filter(opt => opt.answerImageUrl || opt.answerImageFile);
+    const optionsWithoutImages = validOptions.filter(opt => !opt.answerImageUrl && !opt.answerImageFile);
+    
+    if (optionsWithImages.length > 0 && optionsWithoutImages.length > 0) {
+      setError('If one answer has an image, all answers must have images. Please add images to all answers or remove all answer images.');
+      return;
+    }
+
     try {
       setLoading(true);
+
+      // Upload question image if there's a new file
+      let finalQuestionImageUrl = questionImageUrl;
+      if (questionImageFile) {
+        finalQuestionImageUrl = await uploadImage(questionImageFile, 'question');
+      }
+
+      // Upload answer images if there are new files
+      const finalOptions = await Promise.all(
+        validOptions.map(async (opt) => {
+          let finalAnswerImageUrl = opt.answerImageUrl;
+          if (opt.answerImageFile) {
+            finalAnswerImageUrl = await uploadImage(opt.answerImageFile, 'answer');
+          }
+          return {
+            text: opt.text.trim(),
+            isCorrect: opt.isCorrect,
+            answerImageUrl: finalAnswerImageUrl || null
+          };
+        })
+      );
+
       await onSave({
         text: questionText.trim(),
         type: questionType,
-        options: validOptions
+        questionImageUrl: finalQuestionImageUrl,
+        options: finalOptions
       });
       // Form will be reset by useEffect when question changes
     } catch (err) {
@@ -181,6 +272,9 @@ export default function QuestionForm({
   const handleClose = () => {
     if (!loading) {
       setError('');
+      // Reset file states when closing
+      setQuestionImageFile(null);
+      setOptions(prev => prev.map(opt => ({ ...opt, answerImageFile: null })));
       onClose();
     }
   };
@@ -188,14 +282,53 @@ export default function QuestionForm({
   return (
     <Modal isOpen={isOpen} onClose={handleClose} size="xl" isCentered>
       <ModalOverlay bg="#514b52b8" />
-      <ModalContent bg="white" p={0}>
+      <ModalContent bg="white" p={0} position="relative">
         <form onSubmit={handleSubmit}>
-          <ModalHeader p={6} pb={4}>
+          <ModalHeader 
+            pt={20} 
+            pb={20} 
+            pr={32} 
+            pl={32}
+            fontSize="18px"
+            fontWeight={700}
+            color="var(--background)"
+            bg="linear-gradient(90deg, rgba(209, 81, 225, 1) 0%, rgba(255, 255, 255, 1) 100%)"
+          >
             {question ? 'Edit Question' : 'Add New Question'}
           </ModalHeader>
-          <ModalCloseButton top={4} right={4} />
-          <ModalBody p={6} pt={0}>
-            <VStack gap={4} align="stretch">
+          <IconButton
+            aria-label="Close modal"
+            position="absolute"
+            top={4}
+            right={4}
+            size="md"
+            variant="ghost"
+            onClick={handleClose}
+            disabled={loading}
+            borderRadius="md"
+            fontSize="xl"
+            color="gray.600"
+            _hover={{
+              bg: "gray.100",
+              color: "gray.800"
+            }}
+            _active={{
+              bg: "gray.200"
+            }}
+            zIndex={10}
+          >
+            ✕
+          </IconButton>
+          <ModalBody 
+            pt={10}
+            pb={10}
+            pr={25}
+            pl={25}
+            maxH="70vh"
+            overflowY="auto"
+            bg="rgba(248, 247, 248, 1)"
+          >
+            <VStack gap={4} align="stretch" pb={4}>
               {error && (
                 <Box p={3} bg="red.50" borderRadius="md">
                   <Text color="red.600" fontSize="sm">{error}</Text>
@@ -209,6 +342,20 @@ export default function QuestionForm({
                   onChange={(e) => setQuestionText(e.target.value)}
                   placeholder="Enter your question..."
                 />
+              </FormControl>
+
+              <FormControl>
+                <FormLabel>Question Image (Optional)</FormLabel>
+                <ImageUploader
+                  imageUrl={questionImageUrl}
+                  onImageChange={setQuestionImageUrl}
+                  onFileChange={setQuestionImageFile}
+                  type="question"
+                  disabled={loading}
+                />
+                <FormHelperText>
+                  Add an optional image to accompany the question
+                </FormHelperText>
               </FormControl>
 
               <FormControl isRequired>
@@ -264,37 +411,51 @@ export default function QuestionForm({
                 </HStack>
 
                 {options.map((option, index) => (
-                  <HStack key={index} gap={2} align="start">
-                    <Checkbox
-                      isChecked={option.isCorrect}
-                      onChange={(e) => handleOptionChange(index, 'isCorrect', e.target.checked)}
-                      colorScheme="green"
-                      mt={1}
-                    />
-                    <Input
-                      flex={1}
-                      value={option.text}
-                      onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
-                      placeholder={`Option ${index + 1}`}
-                    />
-                    {options.length > 2 && (
-                      <IconButton
-                        aria-label="Remove option"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleRemoveOption(index)}
-                        type="button"
-                      >
-                        🗑️
-                      </IconButton>
-                    )}
-                  </HStack>
+                  <VStack key={index} gap={2} align="stretch" p={3} border="1px solid" borderColor="gray.200" borderRadius="md">
+                    <HStack gap={2} align="start">
+                      <Checkbox
+                        isChecked={option.isCorrect}
+                        onChange={(e) => handleOptionChange(index, 'isCorrect', e.target.checked)}
+                        colorScheme="green"
+                        mt={1}
+                      />
+                      <Input
+                        flex={1}
+                        value={option.text}
+                        onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
+                        placeholder={`Option ${index + 1}`}
+                      />
+                      {options.length > 2 && (
+                        <IconButton
+                          aria-label="Remove option"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveOption(index)}
+                          type="button"
+                        >
+                          🗑️
+                        </IconButton>
+                      )}
+                    </HStack>
+                    <Box>
+                      <Text fontSize="sm" color="gray.600" mb={1}>
+                        Answer Image (Optional)
+                      </Text>
+                      <ImageUploader
+                        imageUrl={option.answerImageUrl || null}
+                        onImageChange={(url) => handleOptionChange(index, 'answerImageUrl', url)}
+                        onFileChange={(file) => handleOptionChange(index, 'answerImageFile', file)}
+                        type="answer"
+                        disabled={loading}
+                      />
+                    </Box>
+                  </VStack>
                 ))}
               </VStack>
             </VStack>
           </ModalBody>
 
-          <ModalFooter p={6} pt={4}>
+          <ModalFooter pt={4} pb={6} pr={25} pl={25}>
             <HStack gap={3}>
               <FunButton
                 variant="outline"

@@ -32,6 +32,7 @@ interface Question {
   id: string;
   text: string;
   type: 'SINGLE_CHOICE' | 'MULTI_CHOICE';
+  questionImageUrl?: string | null;
   options: Option[];
 }
 
@@ -39,6 +40,7 @@ interface Option {
   id: string;
   text: string;
   isCorrect: boolean;
+  answerImageUrl?: string | null;
 }
 
 interface Quiz {
@@ -81,17 +83,29 @@ export default function QuizQuestionsPage() {
   const fetchQuiz = async () => {
     try {
       setLoading(true);
+      setMessage('');
       const response = await fetch(`/api/teacher/quiz/${quizId}/questions`);
       const data = await response.json();
       
       if (response.ok) {
         setQuiz(data.quiz);
       } else {
-        throw new Error(data.error || 'Failed to fetch quiz');
+        const errorMsg = data.error || 'Failed to fetch quiz';
+        const details = data.details || '';
+        const hint = data.hint || '';
+        
+        if (errorMsg === 'Quiz not found') {
+          setMessage(`Quiz not found. The quiz ID "${quizId}" doesn't exist. Please go back to the dashboard and select a valid quiz.`);
+        } else if (errorMsg === 'Failed to fetch quiz questions') {
+          setMessage(`Database Error: ${details || errorMsg}${hint ? ` - ${hint}` : ''}`);
+        } else {
+          setMessage(`Error: ${errorMsg}${details ? ` - ${details}` : ''}`);
+        }
+        console.error('Error fetching quiz:', data);
       }
     } catch (error) {
       console.error('Error fetching quiz:', error);
-      setMessage('Failed to fetch quiz');
+      setMessage(`Failed to fetch quiz: ${error instanceof Error ? error.message : 'Network error'}`);
     } finally {
       setLoading(false);
     }
@@ -113,7 +127,8 @@ export default function QuizQuestionsPage() {
   const handleSaveQuestion = async (questionData: {
     text: string;
     type: 'SINGLE_CHOICE' | 'MULTI_CHOICE';
-    options: Array<{ text: string; isCorrect: boolean }>;
+    questionImageUrl?: string | null;
+    options: Array<{ text: string; isCorrect: boolean; answerImageUrl?: string | null }>;
   }) => {
     try {
       if (editingQuestion) {
@@ -227,10 +242,34 @@ export default function QuizQuestionsPage() {
     );
   }
 
-  if (!quiz) {
+  if (!quiz && !loading) {
     return (
       <Container maxW="container.xl" py={8}>
-        <Text>Quiz not found</Text>
+        <VStack gap={4} align="stretch">
+          <Box p={4} bg="red.50" borderRadius="md" border="1px solid" borderColor="red.200">
+            <Text color="red.600" fontWeight="bold" mb={2}>Quiz Not Found</Text>
+            <Text color="red.600" mb={4}>
+              {message || `The quiz with ID "${quizId}" could not be found. This might happen if:`}
+            </Text>
+            <VStack align="start" gap={2} color="red.700">
+              <Text>• The quiz was deleted</Text>
+              <Text>• The quiz ID in the URL is incorrect</Text>
+              <Text>• You don't have access to this quiz</Text>
+            </VStack>
+          </Box>
+          <FunButton
+            variant="solid"
+            onClick={() => {
+              if (teacherId) {
+                router.push(`/teacher/dashboard?teacherId=${teacherId}`);
+              } else {
+                router.push('/teacher/dashboard');
+              }
+            }}
+          >
+            ← Back to Dashboard
+          </FunButton>
+        </VStack>
       </Container>
     );
   }
@@ -534,6 +573,15 @@ export default function QuizQuestionsPage() {
                         </Badge>
                       </HStack>
                       <Text fontSize="lg">{question.text}</Text>
+                      {question.questionImageUrl && (
+                        <Box mt={2}>
+                          <img 
+                            src={question.questionImageUrl} 
+                            alt="Question" 
+                            style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px' }}
+                          />
+                        </Box>
+                      )}
                     </VStack>
                     <HStack gap={2}>
                       <IconButton
@@ -565,12 +613,21 @@ export default function QuizQuestionsPage() {
                           borderRadius="full"
                           bg={option.isCorrect ? 'green.500' : 'gray.300'}
                         />
-                        <Text
-                          color={option.isCorrect ? 'green.600' : 'gray.600'}
-                          fontWeight={option.isCorrect ? 'bold' : 'normal'}
-                        >
-                          {option.text}
-                        </Text>
+                        <VStack align="start" gap={1} flex={1}>
+                          <Text
+                            color={option.isCorrect ? 'green.600' : 'gray.600'}
+                            fontWeight={option.isCorrect ? 'bold' : 'normal'}
+                          >
+                            {option.text}
+                          </Text>
+                          {option.answerImageUrl && (
+                            <img 
+                              src={option.answerImageUrl} 
+                              alt="Answer" 
+                              style={{ maxWidth: '150px', maxHeight: '100px', borderRadius: '4px' }}
+                            />
+                          )}
+                        </VStack>
                         {option.isCorrect && (
                           <Badge colorScheme="green" size="sm">
                             Correct

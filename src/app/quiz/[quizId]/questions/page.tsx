@@ -26,10 +26,12 @@ interface Question {
   id: string;
   text: string;
   type: 'SINGLE_CHOICE' | 'MULTI_CHOICE';
+  questionImageUrl?: string | null;
   options: Array<{
     id: string;
     text: string;
     isCorrect: boolean;
+    answerImageUrl?: string | null;
   }>;
 }
 
@@ -296,31 +298,84 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
         maxW="xl"
         mx="auto"
       >
-        <Text fontSize="xl" mb={4} fontWeight="semibold">
-          {currentQuestion.text}
-        </Text>
+        <VStack align="stretch" gap={4}>
+          <Text fontSize="xl" mb={2} fontWeight="semibold">
+            {currentQuestion.text}
+          </Text>
+          
+          {currentQuestion.questionImageUrl && (
+            <Box>
+              <img 
+                src={currentQuestion.questionImageUrl} 
+                alt="Question" 
+                style={{ 
+                  maxWidth: '100%', 
+                  maxHeight: '300px', 
+                  borderRadius: '8px',
+                  objectFit: 'contain'
+                }}
+              />
+            </Box>
+          )}
 
-        {currentQuestion.type === "SINGLE_CHOICE" ? (
-          <RadioGroup value={answers[0] || ""} onChange={(val: string) => setAnswers([val])}>
-            <VStack align="start" gap={3}>
-              {optionTexts.map((opt, idx) => (
-                <Radio key={idx} value={opt} colorScheme="blue">
-                  {opt}
-                </Radio>
-              ))}
-            </VStack>
-          </RadioGroup>
-        ) : (
-          <CheckboxGroup value={answers} onChange={(vals) => setAnswers(vals as string[])}>
-            <Stack direction="column" gap={3}>
-              {optionTexts.map((opt, idx) => (
-                <Checkbox key={idx} value={opt} colorScheme="blue">
-                  {opt}
-                </Checkbox>
-              ))}
-            </Stack>
-          </CheckboxGroup>
-        )}
+          {currentQuestion.type === "SINGLE_CHOICE" ? (
+            <RadioGroup value={answers[0] || ""} onChange={(val: string) => setAnswers([val])}>
+              <VStack align="start" gap={3}>
+                {currentQuestion.options.map((opt, idx) => (
+                  <Box key={idx} w="full" p={3} border="1px solid" borderColor="gray.200" borderRadius="md">
+                    <Radio value={opt.text} colorScheme="blue" w="full">
+                      <VStack align="start" gap={2} ml={2}>
+                        <Text>{opt.text}</Text>
+                        {opt.answerImageUrl && (
+                          <Box>
+                            <img 
+                              src={opt.answerImageUrl} 
+                              alt="Answer option" 
+                              style={{ 
+                                maxWidth: '200px', 
+                                maxHeight: '150px', 
+                                borderRadius: '4px',
+                                objectFit: 'contain'
+                              }}
+                            />
+                          </Box>
+                        )}
+                      </VStack>
+                    </Radio>
+                  </Box>
+                ))}
+              </VStack>
+            </RadioGroup>
+          ) : (
+            <CheckboxGroup value={answers} onChange={(vals) => setAnswers(vals as string[])}>
+              <Stack direction="column" gap={3}>
+                {currentQuestion.options.map((opt, idx) => (
+                  <Box key={idx} w="full" p={3} border="1px solid" borderColor="gray.200" borderRadius="md">
+                    <Checkbox value={opt.text} colorScheme="blue" w="full">
+                      <VStack align="start" gap={2} ml={2}>
+                        <Text>{opt.text}</Text>
+                        {opt.answerImageUrl && (
+                          <Box>
+                            <img 
+                              src={opt.answerImageUrl} 
+                              alt="Answer option" 
+                              style={{ 
+                                maxWidth: '200px', 
+                                maxHeight: '150px', 
+                                borderRadius: '4px',
+                                objectFit: 'contain'
+                              }}
+                            />
+                          </Box>
+                        )}
+                      </VStack>
+                    </Checkbox>
+                  </Box>
+                ))}
+              </Stack>
+            </CheckboxGroup>
+          )}
+        </VStack>
 
         <FunButton
           mt={6}
