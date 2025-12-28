@@ -38,35 +38,49 @@ export default function NavBar() {
   ];
 
   const isActive = (href: string) => {
-    if (href === "/") {
+    // Extract pathname from href (remove query params)
+    const hrefPath = href.split('?')[0];
+    
+    if (hrefPath === "/") {
       return pathname === "/";
     }
-    return pathname.startsWith(href);
+    return pathname.startsWith(hrefPath);
   };
 
-  const NavLink = ({ item, isMobile = false }: { item: any; isMobile?: boolean }) => (
-    <FunButton
-      variant={isActive(item.href) ? "solid" : "ghost"}
-      onClick={() => {
-        router.push(item.href);
-        if (isMobile) setIsOpen(false);
-      }}
-      size={isMobile ? "lg" : "md"}
-      w={isMobile ? "full" : "auto"}
-      justifyContent={isMobile ? "flex-start" : "center"}
-    >
-      {item.label}
-    </FunButton>
-  );
+  const NavLink = ({ item, isMobile = false }: { item: any; isMobile?: boolean }) => {
+    const active = isActive(item.href);
+    return (
+      <FunButton
+        variant="ghost"
+        onClick={() => {
+          router.push(item.href);
+          if (isMobile) setIsOpen(false);
+        }}
+        size={isMobile ? "lg" : "md"}
+        w={isMobile ? "full" : "auto"}
+        justifyContent={isMobile ? "flex-start" : "center"}
+        bg={active ? "#fff" : "transparent"}
+        color={active ? "#9f40ce" : (!isMobile ? "white" : undefined)}
+        _hover={active ? { bg: "#fff", color: "#9f40ce" } : (!isMobile ? { bg: "rgba(255, 255, 255, 0.1)", color: "white" } : undefined)}
+      >
+        {item.label}
+      </FunButton>
+    );
+  };
 
   return (
-    <Box bg="white" shadow="sm" borderBottom="1px" borderColor="gray.200">
+    <Box 
+      bg="linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)" 
+      shadow="md"
+      borderBottom="1px" 
+      borderColor="rgba(255, 255, 255, 0.1)"
+    >
       <Container maxW="container.xl">
         <Flex h={16} align="center" justify="space-between">
           {/* Logo */}
           <HStack gap={2} cursor="pointer" onClick={() => router.push("/")}>
             <Text fontSize="2xl">🧠</Text>
-            <Heading size="md" color="blue.700">
+            <Heading size="md" color="white">
               Quiz Companion
             </Heading>
           </HStack>
@@ -87,6 +101,8 @@ export default function NavBar() {
                 variant="ghost"
                 aria-label="Open menu"
                 fontSize="xl"
+                color="white"
+                _hover={{ bg: "rgba(255, 255, 255, 0.1)" }}
               >
                 ☰
               </IconButton>
@@ -122,7 +138,7 @@ export default function NavBar() {
               <HStack justify="space-between" align="center" mb={4}>
                 <HStack gap={2}>
                   <Text fontSize="2xl">🧠</Text>
-                  <Heading size="md" color="blue.700">
+                  <Heading size="md" color="gray.800">
                     Quiz Companion
                   </Heading>
                 </HStack>
