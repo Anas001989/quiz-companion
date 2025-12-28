@@ -44,6 +44,11 @@
     background: #3182ce !important;
   }
 
+/* Form helper text font size */
+.chakra-form__helper-text {
+  font-size: 14px;
+}
+
 /* Fix Next.js portal positioning */
 [nextjs-portal] {
   position: fixed !important;

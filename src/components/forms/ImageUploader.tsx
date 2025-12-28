@@ -160,7 +160,7 @@ export default function ImageUploader({
           <Image
             src={previewUrl || imageUrl || ''}
             alt={`${type} image`}
-            maxH="200px"
+            maxH="50px"
             w="auto"
             mx="auto"
             borderRadius="md"
@@ -173,7 +173,20 @@ export default function ImageUploader({
               variant="outline"
               onClick={handleUploadClick}
               disabled={disabled || uploading}
+              bg="rgba(255, 255, 255, 1)"
+              borderColor="gray.300"
+              display="flex"
+              alignItems="center"
+              _hover={{
+                bg: "rgba(255, 255, 255, 1)",
+                borderColor: "gray.400"
+              }}
+              _active={{
+                bg: "rgba(255, 255, 255, 1)",
+                borderColor: "gray.500"
+              }}
             >
+              <Text fontSize="lg" mr={1} lineHeight="1" height="25px" display="inline-flex" alignItems="start">📷</Text>
               Replace
             </Button>
             <Button
@@ -195,7 +208,18 @@ export default function ImageUploader({
               variant="outline"
               onClick={handleUploadClick}
               disabled={disabled || uploading}
-              flex={1}
+              bg="rgba(255, 255, 255, 1)"
+              borderColor="gray.300"
+              display="flex"
+              alignItems="center"
+              _hover={{
+                bg: "rgba(255, 255, 255, 1)",
+                borderColor: "gray.400"
+              }}
+              _active={{
+                bg: "rgba(255, 255, 255, 1)",
+                borderColor: "gray.500"
+              }}
             >
               {uploading ? (
                 <>
@@ -203,7 +227,10 @@ export default function ImageUploader({
                   Uploading...
                 </>
               ) : (
-                '📷 Upload Image'
+                <>
+                  <Text fontSize="xl" mr={1} lineHeight="1" height="25px" display="inline-flex" alignItems="start">📷</Text>
+                  Upload Image
+                </>
               )}
             </Button>
           </HStack>

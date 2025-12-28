@@ -341,6 +341,7 @@ export default function QuestionForm({
                   value={questionText}
                   onChange={(e) => setQuestionText(e.target.value)}
                   placeholder="Enter your question..."
+                  bg="white"
                 />
               </FormControl>
 
@@ -405,7 +406,19 @@ export default function QuestionForm({
               <VStack gap={3} align="stretch">
                 <HStack justify="space-between">
                   <FormLabel mb={0}>Options</FormLabel>
-                  <Button size="sm" onClick={handleAddOption} type="button">
+                  <Button 
+                    size="sm" 
+                    onClick={handleAddOption} 
+                    type="button"
+                    bg="linear-gradient(135deg, rgba(219, 39, 119, 1) 0%, rgba(124, 58, 237, 1) 100%)"
+                    color="white"
+                    _hover={{
+                      bg: "linear-gradient(135deg, rgba(219, 39, 119, 0.9) 0%, rgba(124, 58, 237, 0.9) 100%)",
+                      transform: "translateY(-2px)",
+                      shadow: "lg"
+                    }}
+                    transition="all 0.2s ease"
+                  >
                     + Add Option
                   </Button>
                 </HStack>
@@ -424,6 +437,7 @@ export default function QuestionForm({
                         value={option.text}
                         onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
                         placeholder={`Option ${index + 1}`}
+                        bg="white"
                       />
                       {options.length > 2 && (
                         <IconButton

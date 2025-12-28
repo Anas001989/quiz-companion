@@ -9,9 +9,9 @@ import {
   Text,
   Spinner,
   Flex,
-  Select,
   IconButton,
-  Badge
+  Badge,
+  Button
 } from '@chakra-ui/react';
 import {
   Modal,
@@ -19,8 +19,7 @@ import {
   ModalContent,
   ModalHeader,
   ModalBody,
-  ModalFooter,
-  ModalCloseButton
+  ModalFooter
 } from '@chakra-ui/modal';
 import {
   FormControl,
@@ -213,12 +212,53 @@ export default function AIGenerateQuestionsModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} size="2xl" isCentered>
+    <Modal isOpen={isOpen} onClose={handleClose} size="xl" isCentered>
       <ModalOverlay bg="#514b52b8" />
-      <ModalContent bg="white" p={0} maxH="90vh" overflowY="auto">
-        <ModalHeader p={6} pb={4}>Generate Questions With AI</ModalHeader>
-        <ModalCloseButton top={4} right={4} />
-        <ModalBody p={6} pt={0}>
+      <ModalContent bg="white" p={0} position="relative">
+        <ModalHeader 
+          pt={20} 
+          pb={20} 
+          pr={32} 
+          pl={32}
+          fontSize="18px"
+          fontWeight={700}
+          color="var(--background)"
+          bg="linear-gradient(90deg, rgba(209, 81, 225, 1) 0%, rgba(255, 255, 255, 1) 100%)"
+        >
+          Generate Questions With AI
+        </ModalHeader>
+        <IconButton
+          aria-label="Close modal"
+          position="absolute"
+          top={4}
+          right={4}
+          size="md"
+          variant="ghost"
+          onClick={handleClose}
+          disabled={generating}
+          borderRadius="md"
+          fontSize="xl"
+          color="gray.600"
+          _hover={{
+            bg: "gray.100",
+            color: "gray.800"
+          }}
+          _active={{
+            bg: "gray.200"
+          }}
+          zIndex={10}
+        >
+          ✕
+        </IconButton>
+        <ModalBody 
+          pt={10}
+          pb={10}
+          pr={25}
+          pl={25}
+          maxH="70vh"
+          overflowY="auto"
+          bg="rgba(248, 247, 248, 1)"
+        >
           <VStack gap={4} align="stretch">
             {error && (
               <Box p={3} bg="red.50" borderRadius="md">
@@ -231,13 +271,40 @@ export default function AIGenerateQuestionsModal({
                 {/* Generation Mode Selection */}
                 <FormControl>
                   <FormLabel>Generation Mode</FormLabel>
-                  <Select
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value as GenerationMode)}
-                  >
-                    <option value="teacher-controlled">Teacher-Controlled (You define question sets)</option>
-                    <option value="ai-controlled">AI-Controlled (AI decides everything)</option>
-                  </Select>
+                  <Box w="full">
+                    <select
+                      value={mode}
+                      onChange={(e) => setMode(e.target.value as GenerationMode)}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        borderRadius: '0.375rem',
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: 'white',
+                        fontSize: '1rem'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = '#3182ce';
+                        e.target.style.outline = 'none';
+                        e.target.style.boxShadow = '0 0 0 1px #3182ce';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '#e2e8f0';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#cbd5e0';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (document.activeElement !== e.currentTarget) {
+                          e.currentTarget.style.borderColor = '#e2e8f0';
+                        }
+                      }}
+                    >
+                      <option value="teacher-controlled">Teacher-Controlled (You define question sets)</option>
+                      <option value="ai-controlled">AI-Controlled (AI decides everything)</option>
+                    </select>
+                  </Box>
                   <FormHelperText>
                     {mode === 'teacher-controlled' 
                       ? 'You control the number of questions, types, and image settings'
@@ -260,15 +327,27 @@ export default function AIGenerateQuestionsModal({
                         borderRadius="md"
                         border="1px solid"
                         borderColor="gray.300"
+                        bg="white"
                       />
                     </FormControl>
 
                     <VStack gap={3} align="stretch">
                       <HStack justify="space-between">
                         <FormLabel mb={0}>Question Sets</FormLabel>
-                        <FunButton size="sm" onClick={addQuestionSet}>
+                        <Button 
+                          size="sm" 
+                          onClick={addQuestionSet}
+                          bg="linear-gradient(135deg, rgba(219, 39, 119, 1) 0%, rgba(124, 58, 237, 1) 100%)"
+                          color="white"
+                          _hover={{
+                            bg: "linear-gradient(135deg, rgba(219, 39, 119, 0.9) 0%, rgba(124, 58, 237, 0.9) 100%)",
+                            transform: "translateY(-2px)",
+                            shadow: "lg"
+                          }}
+                          transition="all 0.2s ease"
+                        >
                           + Add Set
-                        </FunButton>
+                        </Button>
                       </HStack>
 
                       {questionSets.map((set, idx) => (
@@ -297,19 +376,46 @@ export default function AIGenerateQuestionsModal({
                                   value={set.count}
                                   onChange={(e) => updateQuestionSet(set.id, 'count', parseInt(e.target.value) || 1)}
                                   size="sm"
+                                  bg="white"
                                 />
                               </FormControl>
 
                               <FormControl>
                                 <FormLabel fontSize="sm">Type</FormLabel>
-                                <Select
-                                  value={set.type}
-                                  onChange={(e) => updateQuestionSet(set.id, 'type', e.target.value)}
-                                  size="sm"
-                                >
-                                  <option value="SINGLE_CHOICE">Single Choice</option>
-                                  <option value="MULTI_CHOICE">Multiple Choice</option>
-                                </Select>
+                                <Box w="full">
+                                  <select
+                                    value={set.type}
+                                    onChange={(e) => updateQuestionSet(set.id, 'type', e.target.value)}
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.375rem',
+                                      borderRadius: '0.375rem',
+                                      border: '1px solid #e2e8f0',
+                                      backgroundColor: 'white',
+                                      fontSize: '0.875rem'
+                                    }}
+                                    onFocus={(e) => {
+                                      e.target.style.borderColor = '#3182ce';
+                                      e.target.style.outline = 'none';
+                                      e.target.style.boxShadow = '0 0 0 1px #3182ce';
+                                    }}
+                                    onBlur={(e) => {
+                                      e.target.style.borderColor = '#e2e8f0';
+                                      e.target.style.boxShadow = 'none';
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.borderColor = '#cbd5e0';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (document.activeElement !== e.currentTarget) {
+                                        e.currentTarget.style.borderColor = '#e2e8f0';
+                                      }
+                                    }}
+                                  >
+                                    <option value="SINGLE_CHOICE">Single Choice</option>
+                                    <option value="MULTI_CHOICE">Multiple Choice</option>
+                                  </select>
+                                </Box>
                               </FormControl>
 
                               <FormControl>
@@ -320,21 +426,48 @@ export default function AIGenerateQuestionsModal({
                                   value={set.answerCount}
                                   onChange={(e) => updateQuestionSet(set.id, 'answerCount', parseInt(e.target.value) || 2)}
                                   size="sm"
+                                  bg="white"
                                 />
                               </FormControl>
 
                               <FormControl>
                                 <FormLabel fontSize="sm">Image Mode</FormLabel>
-                                <Select
-                                  value={set.imageMode}
-                                  onChange={(e) => updateQuestionSet(set.id, 'imageMode', e.target.value)}
-                                  size="sm"
-                                >
-                                  <option value="none">No images</option>
-                                  <option value="question-only">Question image only</option>
-                                  <option value="answer-only">Answer images only</option>
-                                  <option value="both">Question + Answer images</option>
-                                </Select>
+                                <Box w="full">
+                                  <select
+                                    value={set.imageMode}
+                                    onChange={(e) => updateQuestionSet(set.id, 'imageMode', e.target.value)}
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.375rem',
+                                      borderRadius: '0.375rem',
+                                      border: '1px solid #e2e8f0',
+                                      backgroundColor: 'white',
+                                      fontSize: '0.875rem'
+                                    }}
+                                    onFocus={(e) => {
+                                      e.target.style.borderColor = '#3182ce';
+                                      e.target.style.outline = 'none';
+                                      e.target.style.boxShadow = '0 0 0 1px #3182ce';
+                                    }}
+                                    onBlur={(e) => {
+                                      e.target.style.borderColor = '#e2e8f0';
+                                      e.target.style.boxShadow = 'none';
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.borderColor = '#cbd5e0';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (document.activeElement !== e.currentTarget) {
+                                        e.currentTarget.style.borderColor = '#e2e8f0';
+                                      }
+                                    }}
+                                  >
+                                    <option value="none">No images</option>
+                                    <option value="question-only">Question image only</option>
+                                    <option value="answer-only">Answer images only</option>
+                                    <option value="both">Question + Answer images</option>
+                                  </select>
+                                </Box>
                               </FormControl>
                             </HStack>
                           </VStack>
@@ -445,7 +578,7 @@ export default function AIGenerateQuestionsModal({
           </VStack>
         </ModalBody>
 
-        <ModalFooter p={6} pt={4}>
+        <ModalFooter pt={4} pb={6} pr={25} pl={25}>
           <HStack gap={3}>
             {generatedQuestions ? (
               <>
