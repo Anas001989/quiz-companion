@@ -62,18 +62,35 @@ export default function TeacherDashboard() {
   const fetchQuizzes = async (teacherId: string) => {
     try {
       setLoading(true);
+      setMessage(''); // Clear any previous messages
+      
       const response = await fetch(`/api/teacher/quizzes?teacherId=${teacherId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}: ${response.statusText}` }));
+        const errorMessage = errorData.error || errorData.details || 'Failed to fetch quizzes';
+        setMessage(errorMessage);
+        return;
+      }
+      
       const data = await response.json();
       
-      if (response.ok) {
+      if (data.quizzes) {
         setQuizzes(data.quizzes);
       } else {
-        console.error('Failed to fetch quizzes:', data);
-        throw new Error(data.error || 'Failed to fetch quizzes');
+        console.error('Invalid response format:', data);
+        setMessage('Invalid response from server');
       }
     } catch (error) {
       console.error('Error fetching quizzes:', error);
-      setMessage('Failed to fetch quizzes');
+      console.error('Error type:', typeof error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      const errorMessage = error instanceof Error ? error.message : 'Network error';
+      setMessage(`Failed to fetch quizzes: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

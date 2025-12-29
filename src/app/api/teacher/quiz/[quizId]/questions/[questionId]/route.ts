@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma/prisma'
+import { deleteImage, STORAGE_BUCKETS } from '@/lib/supabase/storage'
 
 export async function PUT(
   request: NextRequest,
@@ -91,10 +92,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'Quiz ID and Question ID are required' }, { status: 400 })
     }
 
-    // Verify the question belongs to the quiz
+    // Verify the question belongs to the quiz and get all related data
     const existingQuestion = await prisma.question.findUnique({
       where: { id: questionId },
-      include: { quiz: true }
+      include: { 
+        quiz: true,
+        options: true
+      }
     })
 
     if (!existingQuestion) {
@@ -105,7 +109,93 @@ export async function DELETE(
       return NextResponse.json({ error: 'Question does not belong to this quiz' }, { status: 403 })
     }
 
-    // Delete the question (options will be deleted due to cascade)
+    // Helper function to extract file path from Supabase storage URL
+    const extractFilePath = (imageUrl: string, bucketName: string): string | null => {
+      try {
+        // Supabase storage URLs typically look like:
+        // https://[project].supabase.co/storage/v1/object/public/[bucket]/[path]
+        // or: https://[project].supabase.co/storage/v1/object/sign/[bucket]/[path]?...
+        const url = new URL(imageUrl)
+        const pathParts = url.pathname.split('/').filter(part => part)
+        
+        // Find the bucket name in the path
+        const bucketIndex = pathParts.findIndex(part => part === bucketName)
+        if (bucketIndex !== -1 && pathParts[bucketIndex + 1]) {
+          // Return everything after the bucket name
+          return pathParts.slice(bucketIndex + 1).join('/')
+        }
+        
+        // Alternative: if the URL contains the bucket name, try to extract from the full path
+        if (url.pathname.includes(bucketName)) {
+          const match = url.pathname.match(new RegExp(`${bucketName}/(.+)`))
+          if (match && match[1]) {
+            // Remove query parameters if present
+            return match[1].split('?')[0]
+          }
+        }
+        
+        return null
+      } catch (error) {
+        console.warn('Failed to parse image URL:', imageUrl, error)
+        return null
+      }
+    }
+
+    // Delete images from storage first (before deleting database records)
+    // Note: If delete policies are not set, these will fail but won't block database deletion
+    try {
+      // Delete question image if it exists
+      if (existingQuestion.questionImageUrl) {
+        try {
+          const filePath = extractFilePath(existingQuestion.questionImageUrl, STORAGE_BUCKETS.QUESTION_IMAGES)
+          if (filePath) {
+            await deleteImage(STORAGE_BUCKETS.QUESTION_IMAGES, filePath)
+            console.log('Deleted question image from storage:', filePath)
+          } else {
+            console.warn('Could not extract file path from question image URL:', existingQuestion.questionImageUrl)
+          }
+        } catch (imageError: any) {
+          // Log but don't fail - image deletion is not critical
+          // This might fail if delete policies are not set, which is okay
+          console.warn('Failed to delete question image from storage (this is okay if delete policies are not set):', imageError?.message || imageError)
+        }
+      }
+
+      // Delete answer images if they exist
+      for (const option of existingQuestion.options) {
+        if (option.answerImageUrl) {
+          try {
+            const filePath = extractFilePath(option.answerImageUrl, STORAGE_BUCKETS.ANSWER_IMAGES)
+            if (filePath) {
+              await deleteImage(STORAGE_BUCKETS.ANSWER_IMAGES, filePath)
+              console.log('Deleted answer image from storage:', filePath)
+            } else {
+              console.warn('Could not extract file path from answer image URL:', option.answerImageUrl)
+            }
+          } catch (imageError: any) {
+            // Log but don't fail - image deletion is not critical
+            // This might fail if delete policies are not set, which is okay
+            console.warn('Failed to delete answer image from storage (this is okay if delete policies are not set):', imageError?.message || imageError)
+          }
+        }
+      }
+    } catch (storageError) {
+      // Log but continue - storage deletion failures shouldn't block question deletion
+      console.warn('Error deleting images from storage (continuing with database deletion):', storageError)
+    }
+
+    // Delete database records in the correct order to avoid foreign key violations
+    // 1. Delete Answers first (they reference both Question and Option)
+    await prisma.answer.deleteMany({
+      where: { questionId }
+    })
+
+    // 2. Delete Options (they reference Question, and we need to delete them before Question due to RESTRICT constraint)
+    await prisma.option.deleteMany({
+      where: { questionId }
+    })
+
+    // 3. Finally delete the Question
     await prisma.question.delete({
       where: { id: questionId }
     })

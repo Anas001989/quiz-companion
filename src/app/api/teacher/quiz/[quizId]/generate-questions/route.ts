@@ -36,6 +36,11 @@ export async function POST(
   try {
     const { quizId } = await params
     const body: GenerateQuestionsRequest = await request.json()
+    
+    // Get base URL from request headers for internal API calls
+    const protocol = request.headers.get('x-forwarded-proto') || 'http'
+    const host = request.headers.get('host') || 'localhost:3000'
+    const baseUrl = `${protocol}://${host}`
     const { mode, questionSets, description, totalQuestions, singleChoiceCount, multiChoiceCount, answerCount } = body
 
     console.log(`[API] POST /api/teacher/quiz/${quizId}/generate-questions - Starting...`)
@@ -104,7 +109,7 @@ ${questionSets!.flatMap((set, setIdx) => {
       questions.push(`  * Include a question image (describe what image would be appropriate)`)
     }
     if (set.imageMode === 'answer-only' || set.imageMode === 'both') {
-      questions.push(`  * Include answer images (describe what image would be appropriate for each answer)`)
+      questions.push(`  * Include answer images for ALL ${set.answerCount} answers (describe what image would be appropriate for EACH answer option - every single answer must have an answerImageUrl description, not null)`)
     }
   }
   return questions
@@ -126,7 +131,11 @@ Format your response as a JSON object with a "questions" key containing an array
   ]
 }
 
-Note: For imageUrl fields, provide a brief description of what image would be appropriate, or null if no image is needed. The actual image generation will happen separately.
+IMPORTANT IMAGE REQUIREMENTS:
+- If answer images are required (answer-only or both mode), you MUST provide answerImageUrl descriptions for ALL answer options. Do not use null for any answerImageUrl when images are required.
+- If question images are required (question-only or both mode), you MUST provide a questionImageUrl description. Do not use null.
+- The actual image generation will happen separately - you only need to provide descriptions here.
+- If images are NOT needed (none mode), use null for all imageUrl fields.
 
 Return ONLY the JSON object, no other text or explanation.`
     } else if (generationMode === 'ai-controlled') {
@@ -164,7 +173,11 @@ Format your response as a JSON object with a "questions" key containing an array
   ]
 }
 
-Note: For imageUrl fields, provide a brief description of what image would be appropriate, or null if no image is needed. The actual image generation will happen separately.
+IMPORTANT IMAGE REQUIREMENTS:
+- If you decide images are needed, you MUST provide answerImageUrl descriptions for ALL answer options. Do not use null for any answerImageUrl when images are needed.
+- If you decide question images are needed, you MUST provide a questionImageUrl description. Do not use null.
+- The actual image generation will happen separately - you only need to provide descriptions here.
+- If images are NOT needed, use null for all imageUrl fields.
 
 Return ONLY the JSON object, no other text or explanation.`
     } else {
@@ -326,6 +339,186 @@ Return ONLY the JSON object, no other text or explanation.`
 
     if (validatedQuestions.length === 0) {
       return NextResponse.json({ error: 'No valid questions generated' }, { status: 500 })
+    }
+
+    // Generate images for descriptions (if image generation is enabled)
+    const IMAGE_GENERATION_ENABLED = process.env.ENABLE_IMAGE_GENERATION === 'true'
+    
+    if (IMAGE_GENERATION_ENABLED) {
+      console.log('Image generation enabled - generating images for descriptions...')
+      
+      // Helper function to check if a string is a URL or a description
+      const isUrl = (str: string | null): boolean => {
+        if (!str) return false
+        return str.startsWith('http://') || str.startsWith('https://')
+      }
+
+      // Map question index to imageMode (for teacher-controlled mode)
+      // This helps us filter which images to generate based on the selected mode
+      const questionImageModeMap: Map<number, ImageMode> = new Map()
+      
+      if (generationMode === 'teacher-controlled' && questionSets) {
+        let questionIndex = 0
+        for (const set of questionSets) {
+          for (let i = 0; i < set.count; i++) {
+            questionImageModeMap.set(questionIndex, set.imageMode)
+            questionIndex++
+          }
+        }
+      } else {
+        // For AI-controlled or legacy mode, we don't have per-question imageMode
+        // So we'll generate all images that have descriptions (backward compatibility)
+        for (let i = 0; i < validatedQuestions.length; i++) {
+          questionImageModeMap.set(i, 'both') // Default to both for backward compatibility
+        }
+      }
+
+      // Collect all image generation tasks
+      interface ImageTask {
+        description: string
+        type: 'question' | 'answer'
+        questionIndex: number
+        optionIndex?: number
+        setResult: (url: string | null) => void
+      }
+
+      const imageTasks: ImageTask[] = []
+
+      // Collect image tasks based on imageMode
+      for (let qIndex = 0; qIndex < validatedQuestions.length; qIndex++) {
+        const question = validatedQuestions[qIndex]
+        const imageMode = questionImageModeMap.get(qIndex) || 'both'
+        
+        // Only collect question images if imageMode allows it
+        if ((imageMode === 'question-only' || imageMode === 'both') && 
+            question.questionImageUrl && !isUrl(question.questionImageUrl)) {
+          imageTasks.push({
+            description: question.questionImageUrl,
+            type: 'question',
+            questionIndex: qIndex,
+            setResult: (url) => {
+              validatedQuestions[qIndex].questionImageUrl = url
+            }
+          })
+        } else if (imageMode === 'answer-only' || imageMode === 'none') {
+          // If answer-only or none, clear question image description
+          if (question.questionImageUrl && !isUrl(question.questionImageUrl)) {
+            validatedQuestions[qIndex].questionImageUrl = null
+          }
+        }
+
+        // Only collect answer images if imageMode allows it
+        if ((imageMode === 'answer-only' || imageMode === 'both')) {
+          for (let optIndex = 0; optIndex < question.options.length; optIndex++) {
+            const option = question.options[optIndex]
+            if (option.answerImageUrl && !isUrl(option.answerImageUrl)) {
+              imageTasks.push({
+                description: option.answerImageUrl,
+                type: 'answer',
+                questionIndex: qIndex,
+                optionIndex: optIndex,
+                setResult: (url) => {
+                  validatedQuestions[qIndex].options[optIndex].answerImageUrl = url
+                }
+              })
+            }
+          }
+        } else if (imageMode === 'question-only' || imageMode === 'none') {
+          // If question-only or none, clear answer image descriptions
+          for (let optIndex = 0; optIndex < question.options.length; optIndex++) {
+            if (question.options[optIndex].answerImageUrl && !isUrl(question.options[optIndex].answerImageUrl)) {
+              validatedQuestions[qIndex].options[optIndex].answerImageUrl = null
+            }
+          }
+        }
+      }
+
+      console.log(`\n📸 Found ${imageTasks.length} images to generate`)
+      console.log(`   - Question images: ${imageTasks.filter(t => t.type === 'question').length}`)
+      console.log(`   - Answer images: ${imageTasks.filter(t => t.type === 'answer').length}\n`)
+
+      // Generate all images in ONE batch request (counts as 1 request against quota!)
+      if (imageTasks.length > 0) {
+        console.log(`🚀 Generating all ${imageTasks.length} images in a single batch request...`)
+        
+        try {
+          // Prepare prompts and types arrays
+          const prompts = imageTasks.map(task => task.description)
+          const types = imageTasks.map(task => task.type)
+          
+          // Call batch endpoint
+          const response = await fetch(`${baseUrl}/api/generate/image`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompts, types })
+          })
+          
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+            const errorMessage = error.error || error.details || 'Failed to generate images'
+            console.error(`Failed to generate images (batch):`, errorMessage)
+            // Set all to null on failure
+            imageTasks.forEach(task => task.setResult(null))
+          } else {
+            const data = await response.json()
+            const urls = data.urls || []
+            
+            // Map URLs back to tasks
+            let successCount = 0
+            let failureCount = 0
+            
+            for (let i = 0; i < imageTasks.length; i++) {
+              const url = urls[i] || null
+              
+              // Validate URL before setting
+              if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                imageTasks[i].setResult(url)
+                successCount++
+                console.log(`  ✓ Image ${i + 1} (${imageTasks[i].type}): ${url.substring(0, 80)}...`)
+              } else {
+                console.warn(`  ✗ Image ${i + 1} (${imageTasks[i].type}): Invalid or missing URL`)
+                imageTasks[i].setResult(null)
+                failureCount++
+              }
+            }
+            
+            console.log(`\n✅ Batch image generation complete: ${successCount} successful, ${failureCount} failed`)
+            console.log(`   (Used only 1 API request instead of ${imageTasks.length} requests!)\n`)
+            
+            // Log final URLs for debugging
+            console.log('Final question image URLs:', validatedQuestions.map((q, idx) => ({
+              question: idx + 1,
+              url: q.questionImageUrl,
+              isValid: q.questionImageUrl ? (q.questionImageUrl.startsWith('http://') || q.questionImageUrl.startsWith('https://')) : false
+            })))
+            console.log('Final answer image URLs:', validatedQuestions.map((q, idx) => ({
+              question: idx + 1,
+              options: q.options.map((opt, optIdx) => ({
+                option: optIdx + 1,
+                url: opt.answerImageUrl,
+                isValid: opt.answerImageUrl ? (opt.answerImageUrl.startsWith('http://') || opt.answerImageUrl.startsWith('https://')) : false
+              }))
+            })))
+          }
+        } catch (error: any) {
+          console.error(`Error generating images (batch):`, error?.message || String(error))
+          // Set all to null on error
+          imageTasks.forEach(task => task.setResult(null))
+        }
+      }
+    } else {
+      console.log('Image generation disabled - descriptions will be saved as-is (or set to null)')
+      // If image generation is disabled, set descriptions to null to avoid saving text as URLs
+      for (const question of validatedQuestions) {
+        if (question.questionImageUrl && !question.questionImageUrl.startsWith('http')) {
+          question.questionImageUrl = null
+        }
+        for (const option of question.options) {
+          if (option.answerImageUrl && !option.answerImageUrl.startsWith('http')) {
+            option.answerImageUrl = null
+          }
+        }
+      }
     }
 
     const duration = Date.now() - startTime

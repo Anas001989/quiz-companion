@@ -96,12 +96,23 @@ export default function ImageUploader({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate image');
+        const errorMsg = data.error || data.details || 'Failed to generate image';
+        console.error('Image generation API error:', data);
+        throw new Error(errorMsg);
       }
 
       // If image generation is successful, update the image URL
       if (data.url) {
-        onImageChange(data.url);
+        // Validate that it's actually a URL, not just text
+        if (data.url.startsWith('http://') || data.url.startsWith('https://')) {
+          onImageChange(data.url);
+        } else {
+          console.error('Invalid URL returned from API:', data.url);
+          throw new Error('Invalid image URL returned from server');
+        }
+      } else {
+        console.error('No URL in API response:', data);
+        throw new Error('No image URL returned from server');
       }
     } catch (err: any) {
       console.error('Error generating image:', err);
@@ -143,6 +154,13 @@ export default function ImageUploader({
     if (imageUrl && !previewUrl) {
       // If we have an imageUrl but no preview, clear local file
       setLocalFile(null);
+      // Validate URL format
+      if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+        console.warn('Invalid image URL format:', imageUrl);
+        setError('Invalid image URL format');
+      } else {
+        setError(''); // Clear any previous errors
+      }
     }
   }, [imageUrl, previewUrl]);
 
@@ -160,12 +178,16 @@ export default function ImageUploader({
           <Image
             src={previewUrl || imageUrl || ''}
             alt={`${type} image`}
-            maxH="50px"
+            maxH="200px"
             w="auto"
             mx="auto"
             borderRadius="md"
             border="1px solid"
             borderColor="gray.200"
+            onError={(e) => {
+              console.error('Failed to load image:', previewUrl || imageUrl);
+              setError('Failed to load image. URL may be invalid or image may have been deleted.');
+            }}
           />
           <HStack mt={2} justify="center" gap={2}>
             <Button

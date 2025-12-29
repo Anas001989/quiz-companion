@@ -18,7 +18,7 @@ This document summarizes the implementation of image-based quiz support for the 
 
 ### 3. API Endpoints ✅
 - **Image Upload**: `/api/upload/image` - Handles file uploads to Supabase Storage
-- **Image Generation**: `/api/generate/image` - Placeholder for AI image generation (requires Gemini/Imagen API integration)
+- **Image Generation**: `/api/generate/image` - ✅ AI image generation using Google Imagen 3 via Vertex AI
 - **Question Generation**: Updated `/api/teacher/quiz/[quizId]/generate-questions` to support:
   - Teacher-controlled mode (with question sets and image modes)
   - AI-controlled mode (AI decides everything)
@@ -53,31 +53,22 @@ This document summarizes the implementation of image-based quiz support for the 
   - Answer images in preview
   - Image indicators
 
-## Image Generation Status
+## Image Generation Status ✅
 
 ### Current State
-- Image generation API endpoint exists (`/api/generate/image`)
-- Currently returns a placeholder error indicating Imagen API integration is needed
+- Image generation API endpoint fully implemented (`/api/generate/image`)
+- Uses Google Imagen 3 via Vertex AI REST API
+- Generates images from text prompts
+- Automatically uploads to Supabase Storage
+- Returns public URL for use in quiz questions/answers
 - Feature flag: `ENABLE_IMAGE_GENERATION` (set to `'true'` to enable)
 
-### To Complete Image Generation
-
-1. **Choose Image Generation Service**:
-   - Option A: Google Imagen API (as originally specified)
-   - Option B: OpenAI DALL-E API (alternative)
-   - Option C: Other image generation service
-
-2. **Update `/api/generate/image/route.ts`**:
-   - Replace placeholder with actual API integration
-   - Implement image generation based on prompt
-   - Upload generated image to Supabase Storage
-   - Return public URL
-
-3. **Update ImageUploader Component**:
-   - Add "Generate with AI" button
-   - Show prompt input field
-   - Display generation progress
-   - Allow regeneration
+### Implementation Details
+- **Service**: Google Imagen 3 (via Vertex AI)
+- **API Method**: REST API (compatible with Next.js serverless functions)
+- **Authentication**: Service account JWT-based authentication
+- **Image Format**: PNG (1024x1024, 1:1 aspect ratio)
+- **Storage**: Generated images automatically uploaded to Supabase Storage
 
 ## Setup Requirements
 
@@ -89,13 +80,65 @@ Create two public buckets:
 - `answer-images`
 
 ### 2. Environment Variables
+
+#### Required for Basic Functionality
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-key
 OPENAI_API_KEY=your-key (for question text generation)
-GEMINI_API_KEY=your-key (optional, for image generation)
 ENABLE_IMAGE_GENERATION=false (set to 'true' when ready)
 ```
+
+#### Required for Image Generation (Google Imagen)
+```env
+# Google Cloud Project Configuration
+GOOGLE_CLOUD_PROJECT_ID=your-project-id
+GOOGLE_CLOUD_LOCATION=us-central1  # or your preferred region (e.g., us-east1, europe-west1)
+
+# Authentication - Option 1: Service Account Credentials (Recommended)
+GOOGLE_CLOUD_SERVICE_ACCOUNT_EMAIL=your-service-account@project.iam.gserviceaccount.com
+GOOGLE_CLOUD_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# Authentication - Option 2: Service Account JSON File (Alternative, for local dev)
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+```
+
+**Note**: For production deployments (Vercel, etc.), use Option 1 (individual credentials) as service account files are not easily accessible in serverless environments.
+
+#### Setting Up Google Cloud for Imagen
+
+1. **Create a Google Cloud Project** (if you don't have one):
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Note your Project ID
+
+2. **Enable Required APIs**:
+   - Enable "Vertex AI API" in your project
+   - Enable "Imagen API" (if available as a separate service)
+
+3. **Create a Service Account**:
+   - Go to IAM & Admin > Service Accounts
+   - Click "Create Service Account"
+   - Give it a name (e.g., "imagen-api-service")
+   - Grant it the "Vertex AI User" role (or "AI Platform User")
+   - Click "Done"
+
+4. **Generate Service Account Key**:
+   - Click on the created service account
+   - Go to "Keys" tab
+   - Click "Add Key" > "Create new key"
+   - Choose "JSON" format
+   - Download the JSON file
+
+5. **Extract Credentials** (for Option 1 - Recommended):
+   - Open the downloaded JSON file
+   - Copy the `client_email` value → use as `GOOGLE_CLOUD_SERVICE_ACCOUNT_EMAIL`
+   - Copy the `private_key` value → use as `GOOGLE_CLOUD_PRIVATE_KEY` (keep the newlines as `\n`)
+
+6. **Set Environment Variables**:
+   - Add the credentials to your `.env.local` file (for local development)
+   - Add to your deployment platform's environment variables (Vercel, etc.)
+   - **Important**: Never commit service account keys to version control
 
 ### 3. Database Migration
 Run the migration:
@@ -215,14 +258,42 @@ answer-images/
 }
 ```
 
+#### Image Generation Request
+```json
+POST /api/generate/image
+{
+  "prompt": "A geometric shape showing a right triangle",
+  "type": "question"  // or "answer"
+}
+```
+
+#### Image Generation Response
+```json
+{
+  "url": "https://your-supabase-url.supabase.co/storage/v1/object/public/question-images/question-1234567890-abc123.png",
+  "success": true
+}
+```
+
+**Error Response**:
+```json
+{
+  "error": "Failed to generate image",
+  "details": "Specific error message",
+  "hint": "Helpful hint for resolving the issue"
+}
+```
+
 ## Future Enhancements
 
-1. **Image Generation Integration**: Complete Gemini/Imagen API integration
+1. ✅ **Image Generation Integration**: Complete Google Imagen API integration
 2. **Image Editing**: Allow cropping/resizing before upload
 3. **Bulk Image Upload**: Upload multiple images at once
 4. **Image Optimization**: Automatic compression and optimization
 5. **Image Search**: Search existing images before uploading
 6. **Image Library**: Reuse images across questions
+7. **Image Regeneration**: Allow regenerating images with different prompts
+8. **Image Style Presets**: Pre-defined styles for different quiz types
 
 ## Testing Checklist
 
@@ -234,7 +305,7 @@ answer-images/
 - [x] Teacher-controlled AI generation
 - [x] AI-controlled AI generation
 - [x] Image deletion
-- [ ] Image generation (pending API integration)
+- [x] Image generation (Google Imagen API integration)
 - [ ] Image regeneration
 - [ ] Storage bucket setup verification
 
