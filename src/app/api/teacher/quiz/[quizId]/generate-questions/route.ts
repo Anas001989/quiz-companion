@@ -26,6 +26,8 @@ interface GenerateQuestionsRequest {
   singleChoiceCount?: number
   multiChoiceCount?: number
   answerCount?: number
+  // Image generation provider
+  imageProvider?: 'openai' | 'gemini'
 }
 
 export async function POST(
@@ -41,7 +43,7 @@ export async function POST(
     const protocol = request.headers.get('x-forwarded-proto') || 'http'
     const host = request.headers.get('host') || 'localhost:3000'
     const baseUrl = `${protocol}://${host}`
-    const { mode, questionSets, description, totalQuestions, singleChoiceCount, multiChoiceCount, answerCount } = body
+    const { mode, questionSets, description, totalQuestions, singleChoiceCount, multiChoiceCount, answerCount, imageProvider = 'openai' } = body
 
     console.log(`[API] POST /api/teacher/quiz/${quizId}/generate-questions - Starting...`)
     console.log('AI Generation Request:', { quizId, mode, questionSets, description, totalQuestions, singleChoiceCount, multiChoiceCount, answerCount })
@@ -446,11 +448,11 @@ Return ONLY the JSON object, no other text or explanation.`
           const prompts = imageTasks.map(task => task.description)
           const types = imageTasks.map(task => task.type)
           
-          // Call batch endpoint
+          // Call batch endpoint with provider
           const response = await fetch(`${baseUrl}/api/generate/image`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompts, types })
+            body: JSON.stringify({ prompts, types, provider: imageProvider || 'openai' })
           })
           
           if (!response.ok) {

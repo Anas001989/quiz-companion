@@ -10,8 +10,7 @@ import {
   Button,
   Image,
   Spinner,
-  Alert,
-  AlertIcon
+  Alert
 } from '@chakra-ui/react';
 
 interface ImageUploaderProps {
@@ -168,7 +167,6 @@ export default function ImageUploader({
     <VStack gap={2} align="stretch" w="full">
       {error && (
         <Alert status="error" size="sm" borderRadius="md">
-          <AlertIcon />
           <Text fontSize="sm">{error}</Text>
         </Alert>
       )}

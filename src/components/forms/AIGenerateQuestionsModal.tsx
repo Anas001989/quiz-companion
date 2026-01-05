@@ -65,6 +65,7 @@ export default function AIGenerateQuestionsModal({
   const [questionSets, setQuestionSets] = useState<QuestionSet[]>([
     { id: '1', count: 5, type: 'SINGLE_CHOICE', answerCount: 4, imageMode: 'none' }
   ]);
+  const [imageProvider, setImageProvider] = useState<'openai' | 'gemini'>('openai');
   const [generating, setGenerating] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[] | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
@@ -132,14 +133,16 @@ export default function AIGenerateQuestionsModal({
             answerCount: set.answerCount,
             imageMode: set.imageMode
           })),
-          description: description || 'General quiz questions'
+          description: description || 'General quiz questions',
+          imageProvider
         };
       } else {
         // AI-controlled mode: send description and total count
         requestBody = {
           mode: 'ai-controlled',
           description,
-          totalQuestions
+          totalQuestions,
+          imageProvider
         };
       }
 
@@ -197,6 +200,7 @@ export default function AIGenerateQuestionsModal({
       setDescription('');
       setTotalQuestions(10);
       setQuestionSets([{ id: '1', count: 5, type: 'SINGLE_CHOICE', answerCount: 4, imageMode: 'none' }]);
+      setImageProvider('openai');
       setGeneratedQuestions(null);
       setPreviewMode(false);
       setError('');
@@ -268,6 +272,48 @@ export default function AIGenerateQuestionsModal({
 
             {!generatedQuestions ? (
               <>
+                {/* Image Provider Selection */}
+                <FormControl>
+                  <FormLabel>Image Generation Provider</FormLabel>
+                  <Box w="full">
+                    <select
+                      value={imageProvider}
+                      onChange={(e) => setImageProvider(e.target.value as 'openai' | 'gemini')}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        borderRadius: '0.375rem',
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: 'white',
+                        fontSize: '1rem'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = '#3182ce';
+                        e.target.style.outline = 'none';
+                        e.target.style.boxShadow = '0 0 0 1px #3182ce';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '#e2e8f0';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#cbd5e0';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (document.activeElement !== e.currentTarget) {
+                          e.currentTarget.style.borderColor = '#e2e8f0';
+                        }
+                      }}
+                    >
+                      <option value="openai">OpenAI (Fast – Recommended)</option>
+                      <option value="gemini">Gemini (Slower – Better for complex images like math/diagrams)</option>
+                    </select>
+                  </Box>
+                  <FormHelperText>
+                    Choose the AI service for generating images. OpenAI is faster, while Gemini is better for complex diagrams and geometry.
+                  </FormHelperText>
+                </FormControl>
+
                 {/* Generation Mode Selection */}
                 <FormControl>
                   <FormLabel>Generation Mode</FormLabel>

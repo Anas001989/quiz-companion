@@ -46,63 +46,81 @@ export async function uploadImage(
     // The upload attempt will provide a better error message
   }
 
-  // Upload the file
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .upload(path, file, {
-      cacheControl: '3600',
-      upsert: false
-    })
+  // Upload the file with retry logic for network errors
+  const maxRetries = 3
+  let lastError: any = null
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (attempt > 0) {
+      // Wait before retry (exponential backoff: 500ms, 1000ms, 2000ms)
+      const delayMs = 500 * Math.pow(2, attempt - 1)
+      console.log(`Retrying upload (attempt ${attempt + 1}/${maxRetries}) after ${delayMs}ms...`)
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
 
-  if (error) {
-    // Provide more helpful error messages
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, {
+        cacheControl: '3600',
+        upsert: false
+      })
+
+    if (!error) {
+      // Success - use this data
+      lastError = null
+      
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(data.path)
+
+      if (!urlData?.publicUrl) {
+        throw new Error('Failed to get public URL for uploaded image')
+      }
+
+      return urlData.publicUrl
+    }
+
+    lastError = error
+    
+    // Don't retry on certain errors
     if (error.message.includes('Bucket not found') || error.message.includes('does not exist')) {
       throw new Error(`Bucket "${bucket}" not found. Please create it in Supabase Storage. See docs/SETUP_IMAGE_STORAGE.md`)
     }
     if (error.message.includes('new row violates row-level security') || error.message.includes('permission')) {
       throw new Error(`Permission denied. Check storage bucket policies in Supabase. Bucket "${bucket}" may need public read/write access.`)
     }
+    
+    // Retry on network errors (fetch failed, timeout, etc.)
+    const isNetworkError = error.message.includes('fetch failed') || 
+                          error.message.includes('network') ||
+                          error.message.includes('timeout') ||
+                          error.message.includes('ECONNREFUSED') ||
+                          error.message.includes('ENOTFOUND')
+    
+    if (!isNetworkError && !error.message.includes('The resource already exists') && !error.message.includes('already exists')) {
+      // Non-retryable error
+      break
+    }
+    
+    // For "already exists" errors, try with a new unique path
     if (error.message.includes('The resource already exists') || error.message.includes('already exists')) {
-      // Try with a new unique path
       const timestamp = Date.now()
       const random = Math.random().toString(36).substring(2, 9)
       const extension = path.split('.').pop() || 'jpg'
-      const newPath = `${bucket === STORAGE_BUCKETS.QUESTION_IMAGES ? 'question' : 'answer'}-${timestamp}-${random}.${extension}`
-      
-      const { data: retryData, error: retryError } = await supabase.storage
-        .from(bucket)
-        .upload(newPath, file, {
-          cacheControl: '3600',
-          upsert: false
-        })
-      
-      if (retryError) {
-        throw new Error(`Failed to upload image: ${retryError.message}`)
-      }
-      
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(retryData.path)
-      
-      return urlData.publicUrl
+      path = `${bucket === STORAGE_BUCKETS.QUESTION_IMAGES ? 'question' : 'answer'}-${timestamp}-${random}.${extension}`
+      // Continue to next iteration with new path
+      continue
     }
-    throw new Error(`Failed to upload image: ${error.message}`)
   }
 
-  if (!data) {
-    throw new Error('Upload succeeded but no data returned')
+  // All retries failed
+  if (lastError) {
+    throw new Error(`Failed to upload image after ${maxRetries} attempts: ${lastError.message}`)
   }
+  
+  throw new Error('Failed to upload image: Unknown error')
 
-  // Get the public URL
-  const { data: urlData } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(data.path)
-
-  if (!urlData?.publicUrl) {
-    throw new Error('Failed to get public URL for uploaded image')
-  }
-
-  return urlData.publicUrl
 }
 
 /**
