@@ -26,6 +26,7 @@ export async function GET(
           id: true,
           title: true,
           answerMode: true,
+          attemptPolicy: true,
           questions: {
             select: {
               id: true,
@@ -79,6 +80,7 @@ export async function GET(
       id: quiz.id,
       title: quiz.title,
       answerMode: quiz.answerMode || 'retry-until-correct',
+      attemptPolicy: quiz.attemptPolicy || 'unlimited',
       questions: quiz.questions
     }
 

@@ -36,14 +36,15 @@ model Student {
 }
 
 model Quiz {
-  id        String     @id @default(cuid())
-  title     String
-  teacher   Teacher    @relation(fields: [teacherId], references: [id])
-  teacherId String
-  answerMode String   @default("retry-until-correct") // "single-pass" or "retry-until-correct"
-  questions Question[]
-  attempts  Attempt[]
-  createdAt DateTime   @default(now())
+  id            String     @id @default(cuid())
+  title         String
+  teacher       Teacher    @relation(fields: [teacherId], references: [id])
+  teacherId     String
+  answerMode    String     @default("retry-until-correct") // "single-pass" or "retry-until-correct"
+  attemptPolicy String     @default("unlimited") // "unlimited" or "single-attempt"
+  questions     Question[]
+  attempts      Attempt[]
+  createdAt     DateTime   @default(now())
 
   @@index([teacherId])
   @@index([createdAt])
@@ -75,17 +76,21 @@ model Option {
 }
 
 model Attempt {
-  id        String      @id @default(cuid())
-  student   Student     @relation(fields: [studentId], references: [id])
-  studentId String
-  quiz      Quiz        @relation(fields: [quizId], references: [id])
-  quizId    String
-  answers   Answer[]
-  score     Int
-  createdAt DateTime    @default(now())
+  id          String      @id @default(cuid())
+  student     Student?    @relation(fields: [studentId], references: [id])
+  studentId   String?
+  userId      String?     // Supabase auth user ID (for single-attempt quizzes)
+  studentName String?     // Student name for unlimited mode (when no userId)
+  quiz        Quiz        @relation(fields: [quizId], references: [id])
+  quizId      String
+  answers     Answer[]
+  score       Int
+  createdAt   DateTime    @default(now())
 
   @@index([quizId])
   @@index([studentId])
+  @@index([userId])
+  @@index([quizId, userId])
   @@index([createdAt])
 }
 

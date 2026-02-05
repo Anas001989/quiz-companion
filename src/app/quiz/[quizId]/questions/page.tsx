@@ -21,6 +21,7 @@ import {
 import { useToast } from "@chakra-ui/toast";
 import { useStudent } from "@/context/StudentContext";
 import GameStageBox from "@/components/quiz/GameStageBox";
+import { supabase } from "@/lib/supabase/supabaseClient";
 
 interface Question {
   id: string;
@@ -43,6 +44,7 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [quizAnswerMode, setQuizAnswerMode] = useState<string>('retry-until-correct');
+  const [quizTitle, setQuizTitle] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
@@ -69,6 +71,7 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
         if (response.ok && data.quiz) {
           hasFetchedRef.current = true;
           setQuestions(data.quiz.questions || []);
+          setQuizTitle(data.quiz.title || '');
           const answerMode = data.quiz.answerMode || 'retry-until-correct';
           setQuizAnswerMode(answerMode);
           // Update quiz settings with the answerMode from the quiz
@@ -236,25 +239,57 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
         };
       });
 
+      // Get current user if authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || null;
+
+      const requestBody: any = {
+        quizId: resolvedParams.quizId,
+        answers: completeAnswers
+      };
+
+      // Include userId if authenticated, otherwise include student name for unlimited mode
+      if (userId) {
+        requestBody.userId = userId;
+      } else {
+        requestBody.studentFullName = student.fullName;
+        requestBody.nickname = student.nickname;
+      }
+
       const response = await fetch('/api/student/attempts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          quizId: resolvedParams.quizId,
-          studentFullName: student.fullName,
-          nickname: student.nickname,
-          answers: completeAnswers
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
         const error = await response.json();
         console.error('Failed to save attempt:', error);
+        
+        // If it's a conflict (already attempted), show error and redirect
+        if (response.status === 409) {
+          toast({
+            title: "Quiz Already Completed",
+            description: error.error || "You have already completed this quiz.",
+            status: "error",
+            duration: 5000,
+            isClosable: true,
+          });
+          router.push('/');
+          return;
+        }
       }
     } catch (error) {
       console.error('Error saving attempt:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save your attempt. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
     } finally {
       // go to final stage page (no flash)
       router.push(`/quiz/${resolvedParams.quizId}/stage?final=true`);
@@ -287,7 +322,7 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
   return (
     <Box p={8}>
       <Heading size="lg" mb={6}>
-        Quiz: {resolvedParams.quizId}
+        {quizTitle || `Quiz: ${resolvedParams.quizId}`}
       </Heading>
 
       <Box

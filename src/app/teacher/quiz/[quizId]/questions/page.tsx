@@ -47,6 +47,7 @@ interface Quiz {
   id: string;
   title: string;
   answerMode?: string;
+  attemptPolicy?: string;
   questions: Question[];
 }
 
@@ -293,9 +294,9 @@ export default function QuizQuestionsPage() {
               ←
             </IconButton>
             <VStack align="start" gap={1}>
-              <Heading size="lg">{quiz.title}</Heading>
+              <Heading size="lg">{quiz?.title || 'Quiz'}</Heading>
               <Text color="gray.600">
-                {quiz.questions.length} questions
+                {quiz?.questions.length || 0} questions
               </Text>
             </VStack>
           </HStack>
@@ -415,6 +416,73 @@ export default function QuizQuestionsPage() {
               {quiz?.answerMode === 'single-pass' 
                 ? 'Students can only answer each question once. They will move to the next question regardless of correctness.'
                 : 'Students must answer correctly before moving to the next question. They can retry incorrect answers.'}
+            </Text>
+          </VStack>
+        </Box>
+
+        {/* Attempt Policy Settings */}
+        <Box p={6} bg="white" borderRadius="md" shadow="sm">
+          <VStack gap={4} align="stretch">
+            <Text fontWeight="bold" fontSize="lg">Attempt Policy</Text>
+            <HStack gap={4}>
+              <Text fontWeight="medium">Allow attempts:</Text>
+              <HStack gap={2}>
+                <FunButton
+                  variant={(quiz?.attemptPolicy || 'unlimited') === 'unlimited' ? 'solid' : 'outline'}
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(`/api/teacher/quiz/${quizId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attemptPolicy: 'unlimited' })
+                      });
+                      const data = await response.json();
+                      if (response.ok) {
+                        setQuiz(prev => prev ? { ...prev, attemptPolicy: 'unlimited' } : null);
+                        setMessage('Attempt policy updated successfully!');
+                      } else {
+                        setMessage(`Failed to update attempt policy: ${data.error || data.details || 'Unknown error'}`);
+                      }
+                    } catch (error: any) {
+                      console.error('Error updating attempt policy:', error);
+                      setMessage(`Failed to update attempt policy: ${error?.message || 'Network error'}`);
+                    }
+                  }}
+                >
+                  Unlimited
+                </FunButton>
+                <FunButton
+                  variant={quiz?.attemptPolicy === 'single-attempt' ? 'solid' : 'outline'}
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(`/api/teacher/quiz/${quizId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attemptPolicy: 'single-attempt' })
+                      });
+                      const data = await response.json();
+                      if (response.ok) {
+                        setQuiz(prev => prev ? { ...prev, attemptPolicy: 'single-attempt' } : null);
+                        setMessage('Attempt policy updated successfully!');
+                      } else {
+                        setMessage(`Failed to update attempt policy: ${data.error || data.details || 'Unknown error'}`);
+                      }
+                    } catch (error: any) {
+                      console.error('Error updating attempt policy:', error);
+                      setMessage(`Failed to update attempt policy: ${error?.message || 'Network error'}`);
+                    }
+                  }}
+                >
+                  One Attempt Only
+                </FunButton>
+              </HStack>
+            </HStack>
+            <Text fontSize="sm" color="gray.600">
+              {(quiz?.attemptPolicy || 'unlimited') === 'single-attempt' 
+                ? 'Students must sign in with email and can only take this quiz once. Each student is identified by their email address.'
+                : 'Students can take this quiz multiple times. No authentication required.'}
             </Text>
           </VStack>
         </Box>
@@ -540,7 +608,7 @@ export default function QuizQuestionsPage() {
         )}
 
         {/* Questions List */}
-        {quiz.questions.length === 0 ? (
+        {!quiz || quiz.questions.length === 0 ? (
           <Box p={8} bg="white" borderRadius="md" shadow="sm" textAlign="center">
             <VStack gap={4}>
               <Text fontSize="lg" color="gray.500">
@@ -559,7 +627,7 @@ export default function QuizQuestionsPage() {
           </Box>
         ) : (
           <VStack gap={4} align="stretch">
-            {quiz.questions.map((question, index) => (
+            {quiz?.questions.map((question, index) => (
               <Box key={question.id} p={6} bg="white" borderRadius="md" shadow="sm">
                 <VStack gap={4} align="stretch">
                   <Flex justify="space-between" align="start">

@@ -31,7 +31,7 @@ export async function GET(
 
     const totalQuestions = quiz._count.questions
 
-    // Fetch all attempts for this quiz with student info
+    // Fetch all attempts for this quiz (both with studentId and userId)
     const attempts = await prisma.attempt.findMany({
       where: {
         quizId: quizId
@@ -49,18 +49,25 @@ export async function GET(
         { score: 'desc' },
         { createdAt: 'desc' }
       ]
-    })
+    }) as any[]
 
-    // Transform the data
-    const attemptsWithDetails = attempts.map(attempt => ({
-      id: attempt.id,
-      studentName: attempt.student.fullName,
-      studentNickname: attempt.student.nickName,
-      score: attempt.score,
-      totalQuestions,
-      percentage: totalQuestions > 0 ? Math.round((attempt.score / totalQuestions) * 100) : 0,
-      completedAt: attempt.createdAt
-    }))
+    // Transform the data - handle both studentId (unlimited) and userId (single-attempt) attempts
+    const attemptsWithDetails = attempts.map(attempt => {
+      // For single-attempt quizzes, attempts have userId and studentName
+      // For unlimited quizzes, attempts have studentId and student relation
+      const studentName = attempt.student?.fullName || attempt.studentName || 'Unknown Student'
+      const studentNickname = attempt.student?.nickName || null
+      
+      return {
+        id: attempt.id,
+        studentName,
+        studentNickname,
+        score: attempt.score,
+        totalQuestions,
+        percentage: totalQuestions > 0 ? Math.round((attempt.score / totalQuestions) * 100) : 0,
+        completedAt: attempt.createdAt
+      }
+    })
 
     // Find top performer (highest score, most recent if tie)
     const topPerformer = attemptsWithDetails.length > 0 ? attemptsWithDetails[0] : null
