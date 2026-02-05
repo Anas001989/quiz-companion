@@ -22,6 +22,54 @@ import { useToast } from "@chakra-ui/toast";
 import { useStudent } from "@/context/StudentContext";
 import GameStageBox from "@/components/quiz/GameStageBox";
 import { supabase } from "@/lib/supabase/supabaseClient";
+import { getCachedQuiz, setCachedQuiz } from "@/lib/quizCache";
+
+function QuizLoadingProgress() {
+  return (
+    <Box
+      minH="100vh"
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
+      p={8}
+      bgGradient="linear(to-b, blue.50, white)"
+    >
+      <style>{`
+        @keyframes quiz-load-shimmer {
+          0% { left: -40%; }
+          100% { left: 100%; }
+        }
+      `}</style>
+      <VStack gap={8} maxW="md" w="full" textAlign="center">
+        <Heading size="lg" color="blue.700">
+          Preparing your quiz...
+        </Heading>
+        <Text color="gray.600" fontSize="sm">
+          Loading questions
+        </Text>
+        <Box
+          w="full"
+          h={3}
+          borderRadius="full"
+          bg="gray.200"
+          overflow="hidden"
+          position="relative"
+        >
+          <Box
+            position="absolute"
+            top={0}
+            w="40%"
+            h="100%"
+            borderRadius="full"
+            bgGradient="linear(to-r, blue.400, blue.600)"
+            style={{ animation: "quiz-load-shimmer 1.5s ease-in-out infinite" }}
+          />
+        </Box>
+      </VStack>
+    </Box>
+  );
+}
 
 interface Question {
   id: string;
@@ -61,21 +109,34 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
   useEffect(() => {
     const fetchQuiz = async () => {
       if (fetchingRef.current || hasFetchedRef.current) return;
-      
+
+      const quizId = resolvedParams.quizId;
+      const cached = getCachedQuiz(quizId);
+      if (cached) {
+        hasFetchedRef.current = true;
+        setQuestions(cached.questions || []);
+        setQuizTitle(cached.title || '');
+        const answerMode = cached.answerMode || 'retry-until-correct';
+        setQuizAnswerMode(answerMode);
+        setQuizSettings({ ...quizSettings, answerMode: answerMode as 'single-pass' | 'retry-until-correct' });
+        setLoading(false);
+        return;
+      }
+
       try {
         fetchingRef.current = true;
         setLoading(true);
-        const response = await fetch(`/api/teacher/quiz/${resolvedParams.quizId}/questions`);
+        const response = await fetch(`/api/teacher/quiz/${quizId}/questions`);
         const data = await response.json();
-        
+
         if (response.ok && data.quiz) {
           hasFetchedRef.current = true;
           setQuestions(data.quiz.questions || []);
           setQuizTitle(data.quiz.title || '');
           const answerMode = data.quiz.answerMode || 'retry-until-correct';
           setQuizAnswerMode(answerMode);
-          // Update quiz settings with the answerMode from the quiz
           setQuizSettings({ ...quizSettings, answerMode: answerMode as 'single-pass' | 'retry-until-correct' });
+          setCachedQuiz(quizId, data.quiz);
         } else {
           toast({
             title: "Failed to load quiz",
@@ -115,13 +176,7 @@ export default function QuestionsPage({ params }: { params: Promise<{ quizId: st
   }, [student.selectedCharacter, loading, questions.length, router, resolvedParams.quizId]);
 
   if (loading) {
-    return (
-      <Box p={8} textAlign="center">
-        <Heading size="lg" mb={6}>
-          Loading quiz...
-        </Heading>
-      </Box>
-    );
+    return <QuizLoadingProgress />;
   }
 
   if (questions.length === 0) {

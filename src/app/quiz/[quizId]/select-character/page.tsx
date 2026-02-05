@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import CharacterPicker from "@/components/quiz/CharacterPicker";
 import { useStudent } from "@/context/StudentContext";
 import { supabase } from "@/lib/supabase/supabaseClient";
+import { prefetchQuiz } from "@/lib/quizCache";
 
 const CHARACTERS = [
   { id: "bear", name: "Bear", thumbnail: "/assets/characters/bear-thumb.png", lottie: "/lottie/bear_idle.json", format:"webp" },
@@ -173,6 +174,11 @@ export default function SelectCharacterPage({ params }: { params: Promise<{ quiz
       }
     }
   }, [checking, user, student.fullName, quizInfo, resolvedParams.quizId, router]);
+
+  // Prefetch quiz questions when character screen is ready so questions page loads fast
+  useEffect(() => {
+    if (!checking && resolvedParams.quizId) prefetchQuiz(resolvedParams.quizId);
+  }, [checking, resolvedParams.quizId]);
 
   if (checking) {
     return (
